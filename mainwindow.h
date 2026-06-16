@@ -51,6 +51,7 @@ private slots:
     bool savePlotAs();
     void exportPdf();
     void editDocumentInfo();
+    void openPreferences();
     void deleteSelection();
     void rotateSelection(double degrees);
     void addDeviceAtCentre(const QString &typeId);

@@ -20,6 +20,7 @@
 #define STAGESCENE_H
 
 #include "documentinfo.h"
+#include "pageconfig.h"
 
 #include <QGraphicsScene>
 #include <QList>
@@ -64,6 +65,11 @@ public:
 
     QRectF pageRect() const { return m_pageRect; }
 
+    // Page size/orientation for this plot. Setting it resizes the page (and the
+    // scene rect) and keeps placed devices within the header clearance.
+    void setPageConfig(const PageConfig &config);
+    const PageConfig &pageConfig() const { return m_pageConfig; }
+
     void clearDevices();
     void removeDevices(const QList<QGraphicsItem *> &items);
     QJsonObject toJson() const;
@@ -100,6 +106,7 @@ private:
     void enforceHeaderClearance();
 
     const DeviceCatalog *m_catalog;
+    PageConfig m_pageConfig;
     QRectF m_pageRect;
     QList<Channel> m_channels;
     DocumentInfo m_documentInfo;

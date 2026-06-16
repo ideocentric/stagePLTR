@@ -22,8 +22,10 @@
 #include "devicepalette.h"
 #include "deviceitem.h"
 #include "documentinfodialog.h"
+#include "pageconfig.h"
 #include "pdfexporter.h"
 #include "porteditor.h"
+#include "preferencesdialog.h"
 #include "stagescene.h"
 #include "stageview.h"
 
@@ -66,6 +68,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_docInfo.date = QDate::currentDate();
 
     m_scene = new StageScene(&m_catalog, this);
+    m_scene->setPageConfig(pageconfig::load(DocumentFeature::StagePlot));
     m_scene->setDocumentInfo(m_docInfo);
     m_view = new StageView(this);
     m_view->setScene(m_scene);
@@ -128,6 +131,12 @@ void MainWindow::createActions()
     docInfoAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));
     connect(docInfoAct, &QAction::triggered, this, &MainWindow::editDocumentInfo);
     addAction(docInfoAct);
+
+    auto *prefsAct = new QAction(tr("&Preferences…"), this);
+    prefsAct->setShortcut(QKeySequence::Preferences);  // ⌘, on macOS
+    prefsAct->setMenuRole(QAction::PreferencesRole);   // moves to app menu on macOS
+    connect(prefsAct, &QAction::triggered, this, &MainWindow::openPreferences);
+    addAction(prefsAct);
 
     auto *exportPdfAct = new QAction(tr("&Export to PDF…"), this);
     exportPdfAct->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_E));
@@ -218,6 +227,9 @@ void MainWindow::createMenus()
     editMenu->addSeparator();
     editMenu->addAction(byText(tr("Rotate &Left")));
     editMenu->addAction(byText(tr("Rotate &Right")));
+    editMenu->addSeparator();
+    // PreferencesRole relocates this to the application menu on macOS.
+    editMenu->addAction(byText(tr("&Preferences…")));
 
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
     viewMenu->addAction(byText(tr("Zoom &In")));
@@ -293,6 +305,7 @@ void MainWindow::newPlot()
     if (!maybeSave())
         return;
     m_scene->clearDevices();
+    m_scene->setPageConfig(pageconfig::load(DocumentFeature::StagePlot));
     m_docInfo = DocumentInfo();
     m_docInfo.date = QDate::currentDate();
     m_scene->setDocumentInfo(m_docInfo);
@@ -382,6 +395,20 @@ void MainWindow::addDeviceAtCentre(const QString &typeId)
 {
     const QPointF centre = m_view->mapToScene(m_view->viewport()->rect().center());
     m_scene->addDevice(typeId, centre);
+}
+
+void MainWindow::openPreferences()
+{
+    PreferencesDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    // Apply the (possibly new) default to the current plot. The page setup is
+    // also stored in the .splot, so this becomes part of the document.
+    const PageConfig chosen = pageconfig::load(DocumentFeature::StagePlot);
+    if (chosen != m_scene->pageConfig()) {
+        m_scene->setPageConfig(chosen);
+        markDirty();
+    }
 }
 
 void MainWindow::about()

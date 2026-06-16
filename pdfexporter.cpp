@@ -107,9 +107,13 @@ bool exportPlot(const QString &path, StageScene *scene, const QString &title, QS
         return false;
     }
 
+    // Match the PDF page to the plot's own page setup so the canvas and export
+    // agree (no letterboxing when the scene is rendered into the page).
+    const PageConfig page = scene->pageConfig();
+
     QPdfWriter writer(path);
-    writer.setPageSize(QPageSize(QPageSize::Letter));
-    writer.setPageOrientation(QPageLayout::Landscape);
+    writer.setPageSize(QPageSize(page.sizeId));
+    writer.setPageOrientation(page.orientation);
     writer.setPageMargins(QMarginsF(15, 15, 15, 15), QPageLayout::Millimeter);
     writer.setResolution(300);
     writer.setTitle(title);

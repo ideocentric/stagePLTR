@@ -32,9 +32,7 @@
 const char *const kDeviceMimeType = "application/x-stageplt-device";
 
 namespace {
-// A4 landscape at 96 dpi (≈ 297 × 210 mm). Page units are pixels for now.
-constexpr qreal kPageWidth = 1122.0;
-constexpr qreal kPageHeight = 793.0;
+// Page units are pixels at 96 dpi; the page rect comes from the PageConfig.
 constexpr qreal kMargin = 48.0;
 
 // Title-block letterhead geometry (top of the page).
@@ -47,9 +45,18 @@ constexpr qreal kHeaderReserved = kHeaderHeight + 2 * kHeaderPad + 4.0;
 StageScene::StageScene(const DeviceCatalog *catalog, QObject *parent)
     : QGraphicsScene(parent)
     , m_catalog(catalog)
-    , m_pageRect(0.0, 0.0, kPageWidth, kPageHeight)
 {
+    setPageConfig(m_pageConfig);  // establishes m_pageRect and the scene rect
+}
+
+void StageScene::setPageConfig(const PageConfig &config)
+{
+    m_pageConfig = config;
+    const QSizeF px = config.pixelSize();
+    m_pageRect = QRectF(0.0, 0.0, px.width(), px.height());
     setSceneRect(m_pageRect.adjusted(-kMargin, -kMargin, kMargin, kMargin));
+    enforceHeaderClearance();  // keep devices below the (possibly moved) header
+    update();
 }
 
 DeviceItem *StageScene::addDevice(const QString &typeId, const QPointF &scenePos)
@@ -134,6 +141,7 @@ QJsonObject StageScene::toJson() const
 
     QJsonObject root;
     root[QStringLiteral("version")] = 1;
+    root[QStringLiteral("page")] = m_pageConfig.toJson();
     root[QStringLiteral("devices")] = devices;
     return root;
 }
@@ -141,6 +149,11 @@ QJsonObject StageScene::toJson() const
 bool StageScene::fromJson(const QJsonObject &obj, QString *error)
 {
     clearDevices();
+
+    // Restore the page setup before placing devices so clamping uses the right
+    // page. Files without a "page" key keep the current (global-default) config.
+    if (obj.contains(QStringLiteral("page")))
+        setPageConfig(PageConfig::fromJson(obj.value(QStringLiteral("page")).toObject()));
 
     const QJsonArray devices = obj.value(QStringLiteral("devices")).toArray();
     for (const QJsonValue &value : devices) {

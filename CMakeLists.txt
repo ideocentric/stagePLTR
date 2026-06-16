@@ -33,6 +33,10 @@ set(PROJECT_SOURCES
     devicepalette.h
     ports.cpp
     ports.h
+    pageconfig.cpp
+    pageconfig.h
+    preferencesdialog.cpp
+    preferencesdialog.h
     channeltablemodel.cpp
     channeltablemodel.h
     porteditor.cpp
