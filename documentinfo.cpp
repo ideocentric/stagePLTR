@@ -85,7 +85,53 @@ void drawLogo(QPainter &p, const QRectF &bound, const DocumentInfo &info)
     }
 }
 
+// Scale `src` to fit within `bound`, centred both ways.
+QRectF fitCentered(const QSizeF &src, const QRectF &bound)
+{
+    if (src.width() <= 0 || src.height() <= 0)
+        return QRectF(bound.center(), QSizeF(0, 0));
+    const qreal s = qMin(bound.width() / src.width(), bound.height() / src.height());
+    const qreal w = src.width() * s;
+    const qreal h = src.height() * s;
+    return QRectF(bound.left() + (bound.width() - w) / 2.0,
+                  bound.top() + (bound.height() - h) / 2.0, w, h);
+}
+
+void drawLogoCentered(QPainter &p, const QRectF &bound, const DocumentInfo &info)
+{
+    if (info.logoFormat.compare(QLatin1String("svg"), Qt::CaseInsensitive) == 0) {
+        QSvgRenderer renderer(info.logoData);
+        if (!renderer.isValid())
+            return;
+        QSizeF src = renderer.defaultSize();
+        if (src.isEmpty())
+            src = QSizeF(1, 1);
+        renderer.render(&p, fitCentered(src, bound));
+    } else {
+        const QImage img = QImage::fromData(info.logoData);
+        if (img.isNull())
+            return;
+        p.drawImage(fitCentered(QSizeF(img.size()), bound), img);
+    }
+}
+
 } // namespace
+
+void drawLetterhead(QPainter &p, const QRectF &rect, const DocumentInfo &info)
+{
+    p.save();
+    if (info.hasLogo()) {
+        drawLogoCentered(p, rect, info);
+    } else if (!info.bandName.isEmpty()) {
+        QFont font = p.font();
+        font.setBold(true);
+        font.setPixelSize(qMax(1, int(rect.height() * 0.6)));
+        p.setFont(font);
+        p.setPen(QColor(0x1a, 0x1a, 0x1a));
+        p.drawText(rect, Qt::AlignCenter, info.bandName);
+    }
+    p.restore();
+}
 
 void drawTitleBlock(QPainter &p, const QRectF &rect, const DocumentInfo &info,
                     const QString &section)

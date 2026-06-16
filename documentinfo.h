@@ -50,4 +50,8 @@ struct DocumentInfo
 void drawTitleBlock(QPainter &p, const QRectF &rect, const DocumentInfo &info,
                     const QString &section);
 
+// Draws just the letterhead — logo (preferred) or band name — centred in `rect`.
+// Used for the on-page header; the date is drawn separately as a page footer.
+void drawLetterhead(QPainter &p, const QRectF &rect, const DocumentInfo &info);
+
 #endif // DOCUMENTINFO_H

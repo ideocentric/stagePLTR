@@ -23,11 +23,14 @@
 #include "documentinfo.h"
 #include "ports.h"
 
+#include <QFont>
 #include <QGraphicsSceneDragDropEvent>
+#include <QGraphicsSceneMouseEvent>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMimeData>
 #include <QPainter>
+#include <QTransform>
 
 const char *const kDeviceMimeType = "application/x-stageplt-device";
 
@@ -35,11 +38,12 @@ namespace {
 // Page units are pixels at 96 dpi; the page rect comes from the PageConfig.
 constexpr qreal kMargin = 48.0;
 
-// Title-block letterhead geometry (top of the page).
+// Letterhead geometry (top of the page) and footer (bottom of the page).
 constexpr qreal kHeaderHeight = 60.0;
 constexpr qreal kHeaderPad = 16.0;
-// Vertical space devices must stay below when the title block is shown.
+// Vertical space devices must stay below when a letterhead is shown.
 constexpr qreal kHeaderReserved = kHeaderHeight + 2 * kHeaderPad + 4.0;
+constexpr qreal kFooterHeight = 22.0;  // small centred date strip at the bottom
 }
 
 StageScene::StageScene(const DeviceCatalog *catalog, QObject *parent)
@@ -297,14 +301,22 @@ void StageScene::setDocumentInfo(const DocumentInfo &info)
     update();
 }
 
-bool StageScene::titleBlockShown() const
+bool StageScene::headerShown() const
 {
-    return m_documentInfo.hasContent() || m_documentInfo.date.isValid();
+    return m_documentInfo.hasContent();  // a logo or band name to display
+}
+
+QRectF StageScene::headerRect() const
+{
+    return QRectF(m_pageRect.left() + kHeaderPad, m_pageRect.top() + kHeaderPad,
+                  m_pageRect.width() - 2 * kHeaderPad, kHeaderHeight);
 }
 
 qreal StageScene::contentTop() const
 {
-    return titleBlockShown() ? m_pageRect.top() + kHeaderReserved : m_pageRect.top();
+    // Reserve the letterhead band only when there is actually a logo/name to
+    // show; the empty-state hint is faint and doesn't push devices down.
+    return headerShown() ? m_pageRect.top() + kHeaderReserved : m_pageRect.top();
 }
 
 void StageScene::enforceHeaderClearance()
@@ -323,19 +335,57 @@ void StageScene::enforceHeaderClearance()
 void StageScene::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsScene::drawForeground(painter, rect);
+    drawHeader(*painter);
+    drawFooter(*painter);
+    Q_UNUSED(rect);
+}
 
-    if (!titleBlockShown())
+void StageScene::drawHeader(QPainter &painter) const
+{
+    const QRectF band = headerRect();
+    painter.save();
+    if (headerShown()) {
+        // Logo or band name, centred at the top of the page (part of the page,
+        // not a separate filled strip).
+        drawLetterhead(painter, band, m_documentInfo);
+    } else {
+        // Discoverability: faint hint that opens Document Info on double-click.
+        QFont font = painter.font();
+        font.setPixelSize(13);
+        font.setItalic(true);
+        painter.setFont(font);
+        painter.setPen(QColor(0xb0, 0xb3, 0xb6));
+        painter.drawText(band, Qt::AlignCenter,
+                         QObject::tr("Double-click to add band name / logo"));
+    }
+    painter.restore();
+}
+
+void StageScene::drawFooter(QPainter &painter) const
+{
+    if (!m_documentInfo.date.isValid())
         return;
+    painter.save();
+    QFont font = painter.font();
+    font.setPixelSize(9);  // very small, centred footer
+    painter.setFont(font);
+    painter.setPen(QColor(0x80, 0x80, 0x80));
+    const QRectF footer(m_pageRect.left(), m_pageRect.bottom() - kFooterHeight,
+                        m_pageRect.width(), kFooterHeight);
+    painter.drawText(footer, Qt::AlignHCenter | Qt::AlignVCenter,
+                     m_documentInfo.date.toString(QStringLiteral("MMMM d, yyyy")));
+    painter.restore();
+}
 
-    // Letterhead-style title block across the top of the page.
-    const QRectF band(m_pageRect.left() + kHeaderPad, m_pageRect.top() + kHeaderPad,
-                      m_pageRect.width() - 2 * kHeaderPad, kHeaderHeight);
-
-    painter->save();
-    // Opaque strip so devices don't bleed into the header.
-    painter->fillRect(QRectF(m_pageRect.left(), m_pageRect.top(),
-                             m_pageRect.width(), kHeaderHeight + 2 * kHeaderPad),
-                      Qt::white);
-    drawTitleBlock(*painter, band, m_documentInfo, QString());
-    painter->restore();
+void StageScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
+{
+    // Double-clicking the header band (and not a device) edits the band/logo.
+    if (event->button() == Qt::LeftButton
+        && !itemAt(event->scenePos(), QTransform())
+        && headerRect().contains(event->scenePos())) {
+        emit editDocumentInfoRequested();
+        event->accept();
+        return;
+    }
+    QGraphicsScene::mouseDoubleClickEvent(event);
 }

@@ -93,16 +93,22 @@ signals:
     void plotChanged();
     // Emitted when the numbered channel list changes (for the breakout table).
     void channelsChanged();
+    // Emitted when the user double-clicks the page header (to edit band/logo).
+    void editDocumentInfoRequested();
 
 protected:
     void dragEnterEvent(QGraphicsSceneDragDropEvent *event) override;
     void dragMoveEvent(QGraphicsSceneDragDropEvent *event) override;
     void dropEvent(QGraphicsSceneDragDropEvent *event) override;
+    void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
     void drawBackground(QPainter *painter, const QRectF &rect) override;
     void drawForeground(QPainter *painter, const QRectF &rect) override;
 
 private:
-    bool titleBlockShown() const;
+    bool headerShown() const;          // a logo or band name is set
+    QRectF headerRect() const;         // top-of-page letterhead band
+    void drawHeader(QPainter &painter) const;
+    void drawFooter(QPainter &painter) const;
     void enforceHeaderClearance();
 
     const DeviceCatalog *m_catalog;

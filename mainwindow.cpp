@@ -85,6 +85,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_scene, &StageScene::channelsChanged, this, [this] {
         m_channelModel->setChannels(m_scene->channels());
     });
+    connect(m_scene, &StageScene::editDocumentInfoRequested,
+            this, &MainWindow::editDocumentInfo);
 
     statusBar()->showMessage(tr("Ready"));
     resize(1280, 900);
