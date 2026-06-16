@@ -42,6 +42,24 @@ DevicePalette::DevicePalette(QWidget *parent)
     setDragEnabled(true);
     setSelectionMode(QAbstractItemView::SingleSelection);
 
+    // The device icons are dark line-art, so in OS dark mode they'd be dark on a
+    // dark panel and disappear. Pin the palette to a light-gray background with
+    // dark text via a style sheet (overrides the native dark theme on every
+    // platform, unlike a QPalette override which the macOS style can ignore).
+    setStyleSheet(QStringLiteral(
+        "QListWidget {"
+        "  background-color: #e9e9e9;"
+        "  color: #202020;"
+        "  border: none;"
+        "}"
+        "QListWidget::item {"
+        "  color: #202020;"
+        "}"
+        "QListWidget::item:selected {"
+        "  background-color: #bcd4f6;"
+        "  color: #101010;"
+        "}"));
+
     connect(this, &QListWidget::itemActivated, this, [this](QListWidgetItem *item) {
         if (item)
             emit deviceActivated(idOf(item));
