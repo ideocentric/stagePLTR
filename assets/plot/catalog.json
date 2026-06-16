@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "comment": "Device catalog for stagePLTR. 'icon' is a filename in assets/plot/ (bundled into the Qt resource system as :/plot/<icon>). 'defaultSize' is the on-canvas size in px; icons use a square 100x100 viewBox, so sizes are kept square to avoid distortion. 'ports' is the default connection template; an output with toConsole=true becomes a numbered channel (stereo = 2). Mic'd sources (amps, drums) have no console output by default — place a mic on them; amps include an optional Direct Out (toConsole=false).",
+  "devices": [
+    {
+      "id": "mic-straight-overhead",
+      "name": "Straight Mic",
+      "category": "Microphones",
+      "icon": "mic-straight-overhead.svg",
+      "defaultSize": [40, 40],
+      "ports": [
+        {"label": "Mic", "direction": "output", "connector": "xlr", "level": "mic", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "band", "toConsole": true}
+      ]
+    },
+    {
+      "id": "mic-boom-left-overhead",
+      "name": "Boom Mic (Left)",
+      "category": "Microphones",
+      "icon": "mic-boom-left-overhead.svg",
+      "defaultSize": [44, 44],
+      "ports": [
+        {"label": "Mic", "direction": "output", "connector": "xlr", "level": "mic", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "band", "toConsole": true}
+      ]
+    },
+    {
+      "id": "mic-boom-right-overhead",
+      "name": "Boom Mic (Right)",
+      "category": "Microphones",
+      "icon": "mic-boom-right-overhead.svg",
+      "defaultSize": [44, 44],
+      "ports": [
+        {"label": "Mic", "direction": "output", "connector": "xlr", "level": "mic", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "band", "toConsole": true}
+      ]
+    },
+    {
+      "id": "mic-boom-left-perp-overhead",
+      "name": "Boom Mic (Left, Perp.)",
+      "category": "Microphones",
+      "icon": "mic-boom-left-perp-overhead.svg",
+      "defaultSize": [44, 44],
+      "ports": [
+        {"label": "Mic", "direction": "output", "connector": "xlr", "level": "mic", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "band", "toConsole": true}
+      ]
+    },
+    {
+      "id": "mic-boom-right-perp-overhead",
+      "name": "Boom Mic (Right, Perp.)",
+      "category": "Microphones",
+      "icon": "mic-boom-right-perp-overhead.svg",
+      "defaultSize": [44, 44],
+      "ports": [
+        {"label": "Mic", "direction": "output", "connector": "xlr", "level": "mic", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "band", "toConsole": true}
+      ]
+    },
+    {
+      "id": "amp-small-overhead",
+      "name": "Small Amp",
+      "category": "Amplifiers",
+      "icon": "amp-small-overhead.svg",
+      "defaultSize": [48, 48],
+      "ports": [
+        {"label": "Direct Out", "direction": "output", "connector": "xlr", "level": "line", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "band", "toConsole": false, "notes": "Optional direct output"}
+      ]
+    },
+    {
+      "id": "amp-medium-overhead",
+      "name": "Medium Amp",
+      "category": "Amplifiers",
+      "icon": "amp-medium-overhead.svg",
+      "defaultSize": [56, 56],
+      "ports": [
+        {"label": "Direct Out", "direction": "output", "connector": "xlr", "level": "line", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "band", "toConsole": false, "notes": "Optional direct output"}
+      ]
+    },
+    {
+      "id": "amp-halfstack-overhead",
+      "name": "Half-Stack Amp",
+      "category": "Amplifiers",
+      "icon": "amp-halfstack-overhead.svg",
+      "defaultSize": [64, 64],
+      "ports": [
+        {"label": "Direct Out", "direction": "output", "connector": "xlr", "level": "line", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "band", "toConsole": false, "notes": "Optional direct output"}
+      ]
+    },
+    {
+      "id": "synth-25-overhead",
+      "name": "Synth (25-key)",
+      "category": "Keys",
+      "icon": "synth-25-overhead.svg",
+      "defaultSize": [52, 52],
+      "ports": [
+        {"label": "Output", "direction": "output", "connector": "ts", "level": "line", "signal": "stereo", "balanced": false, "phantom": false, "providedBy": "band", "toConsole": true, "notes": "DI"}
+      ]
+    },
+    {
+      "id": "synth-61-overhead",
+      "name": "Synth (61-key)",
+      "category": "Keys",
+      "icon": "synth-61-overhead.svg",
+      "defaultSize": [68, 68],
+      "ports": [
+        {"label": "Output", "direction": "output", "connector": "ts", "level": "line", "signal": "stereo", "balanced": false, "phantom": false, "providedBy": "band", "toConsole": true, "notes": "DI"}
+      ]
+    },
+    {
+      "id": "synth-88-overhead",
+      "name": "Synth (88-key)",
+      "category": "Keys",
+      "icon": "synth-88-overhead.svg",
+      "defaultSize": [84, 84],
+      "ports": [
+        {"label": "Output", "direction": "output", "connector": "ts", "level": "line", "signal": "stereo", "balanced": false, "phantom": false, "providedBy": "band", "toConsole": true, "notes": "DI"}
+      ]
+    },
+    {
+      "id": "drumset-overhead",
+      "name": "Drum Set",
+      "category": "Drums",
+      "icon": "drumset-overhead.svg",
+      "defaultSize": [96, 96],
+      "ports": []
+    },
+    {
+      "id": "floor-tom-overhead",
+      "name": "Floor Tom",
+      "category": "Drums",
+      "icon": "floor-tom-overhead.svg",
+      "defaultSize": [44, 44],
+      "ports": []
+    },
+    {
+      "id": "floor-monitor-overhead",
+      "name": "Floor Monitor",
+      "category": "Monitors",
+      "icon": "floor-monitor-overhead.svg",
+      "defaultSize": [56, 56],
+      "ports": [
+        {"label": "Monitor Send", "direction": "input", "connector": "xlr", "level": "line", "signal": "mono", "balanced": true, "phantom": false, "providedBy": "venue", "toConsole": false}
+      ]
+    },
+    {
+      "id": "fx-mono-stereo-overhead",
+      "name": "FX (Mono/Stereo)",
+      "category": "Effects",
+      "icon": "fx-mono-stereo-overhead.svg",
+      "defaultSize": [48, 48],
+      "ports": [
+        {"label": "In", "direction": "input", "connector": "ts", "level": "instrument", "signal": "mono", "balanced": false, "phantom": false, "providedBy": "band", "toConsole": false},
+        {"label": "Out", "direction": "output", "connector": "ts", "level": "line", "signal": "stereo", "balanced": false, "phantom": false, "providedBy": "band", "toConsole": true}
+      ]
+    },
+    {
+      "id": "stage-rack-overhead",
+      "name": "Stage Rack",
+      "category": "Racks",
+      "icon": "stage-rack-overhead.svg",
+      "defaultSize": [60, 60],
+      "ports": []
+    }
+  ]
+}

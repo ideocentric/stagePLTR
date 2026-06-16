@@ -1,0 +1,328 @@
+/*
+ * stagePLTR — stage plots and tech riders for bands.
+ * Copyright (C) 2026 Matt Comeione
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include "stagescene.h"
+
+#include "devicecatalog.h"
+#include "deviceitem.h"
+#include "documentinfo.h"
+#include "ports.h"
+
+#include <QGraphicsSceneDragDropEvent>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QMimeData>
+#include <QPainter>
+
+const char *const kDeviceMimeType = "application/x-stageplt-device";
+
+namespace {
+// A4 landscape at 96 dpi (≈ 297 × 210 mm). Page units are pixels for now.
+constexpr qreal kPageWidth = 1122.0;
+constexpr qreal kPageHeight = 793.0;
+constexpr qreal kMargin = 48.0;
+
+// Title-block letterhead geometry (top of the page).
+constexpr qreal kHeaderHeight = 60.0;
+constexpr qreal kHeaderPad = 16.0;
+// Vertical space devices must stay below when the title block is shown.
+constexpr qreal kHeaderReserved = kHeaderHeight + 2 * kHeaderPad + 4.0;
+}
+
+StageScene::StageScene(const DeviceCatalog *catalog, QObject *parent)
+    : QGraphicsScene(parent)
+    , m_catalog(catalog)
+    , m_pageRect(0.0, 0.0, kPageWidth, kPageHeight)
+{
+    setSceneRect(m_pageRect.adjusted(-kMargin, -kMargin, kMargin, kMargin));
+}
+
+DeviceItem *StageScene::addDevice(const QString &typeId, const QPointF &scenePos)
+{
+    if (!m_catalog)
+        return nullptr;
+    const DeviceType *type = m_catalog->find(typeId);
+    if (!type)
+        return nullptr;
+
+    auto *item = new DeviceItem(*type);
+    addItem(item);
+    item->setPos(scenePos);  // after addItem so itemChange clamping can apply
+
+    // Any later geometry change on the item is a content change.
+    connect(item, &QGraphicsObject::xChanged, this, &StageScene::plotChanged);
+    connect(item, &QGraphicsObject::yChanged, this, &StageScene::plotChanged);
+    connect(item, &QGraphicsObject::rotationChanged, this, &StageScene::plotChanged);
+
+    emit plotChanged();
+    renumberChannels();
+    return item;
+}
+
+void StageScene::clearDevices()
+{
+    const QList<QGraphicsItem *> existing = items();
+    bool removedAny = false;
+    for (QGraphicsItem *item : existing) {
+        if (item->type() == DeviceItem::Type) {
+            removeItem(item);
+            delete item;
+            removedAny = true;
+        }
+    }
+    if (removedAny) {
+        emit plotChanged();
+        renumberChannels();
+    }
+}
+
+void StageScene::removeDevices(const QList<QGraphicsItem *> &toRemove)
+{
+    bool removedAny = false;
+    for (QGraphicsItem *item : toRemove) {
+        if (item && item->type() == DeviceItem::Type) {
+            removeItem(item);
+            delete item;
+            removedAny = true;
+        }
+    }
+    if (removedAny) {
+        emit plotChanged();
+        renumberChannels();
+    }
+}
+
+QJsonObject StageScene::toJson() const
+{
+    QJsonArray devices;
+    // Iterate in stable (insertion-ish) order: items() is z-ordered, which is
+    // fine for round-tripping. Numbering order will matter once ports land.
+    const QList<QGraphicsItem *> all = items(Qt::AscendingOrder);
+    for (QGraphicsItem *item : all) {
+        if (item->type() != DeviceItem::Type)
+            continue;
+        const auto *device = static_cast<DeviceItem *>(item);
+        QJsonObject obj;
+        obj[QStringLiteral("type")] = device->typeId();
+        obj[QStringLiteral("x")] = device->pos().x();
+        obj[QStringLiteral("y")] = device->pos().y();
+        obj[QStringLiteral("rotation")] = device->rotation();
+        obj[QStringLiteral("label")] = device->label();
+
+        QJsonArray portArray;
+        for (const Port &port : device->ports())
+            portArray.append(port.toJson());
+        obj[QStringLiteral("ports")] = portArray;
+
+        devices.append(obj);
+    }
+
+    QJsonObject root;
+    root[QStringLiteral("version")] = 1;
+    root[QStringLiteral("devices")] = devices;
+    return root;
+}
+
+bool StageScene::fromJson(const QJsonObject &obj, QString *error)
+{
+    clearDevices();
+
+    const QJsonArray devices = obj.value(QStringLiteral("devices")).toArray();
+    for (const QJsonValue &value : devices) {
+        const QJsonObject d = value.toObject();
+        const QString typeId = d.value(QStringLiteral("type")).toString();
+        DeviceItem *item =
+            addDevice(typeId, QPointF(d.value(QStringLiteral("x")).toDouble(),
+                                      d.value(QStringLiteral("y")).toDouble()));
+        if (!item) {
+            // Unknown device id: skip but report so the user knows something was dropped.
+            if (error)
+                *error = QStringLiteral("Unknown device type '%1' skipped").arg(typeId);
+            continue;
+        }
+        item->setRotation(d.value(QStringLiteral("rotation")).toDouble());
+        const QString label = d.value(QStringLiteral("label")).toString();
+        if (!label.isEmpty())
+            item->setLabel(label);
+
+        // Restore saved ports if present; otherwise keep the catalog defaults.
+        if (d.contains(QStringLiteral("ports"))) {
+            QList<Port> restored;
+            const QJsonArray portArray = d.value(QStringLiteral("ports")).toArray();
+            for (const QJsonValue &portValue : portArray)
+                restored.append(Port::fromJson(portValue.toObject()));
+            item->setPorts(restored);
+        }
+    }
+    renumberChannels();
+    return true;
+}
+
+void StageScene::renumberChannels()
+{
+    m_channels.clear();
+    int next = 1;
+
+    const QList<QGraphicsItem *> all = items(Qt::AscendingOrder);
+    for (QGraphicsItem *gi : all) {
+        if (gi->type() != DeviceItem::Type)
+            continue;
+        auto *device = static_cast<DeviceItem *>(gi);
+
+        QList<int> deviceNumbers;
+        for (const Port &port : device->ports()) {
+            if (!port.isConsoleChannel())
+                continue;
+            const bool stereo = port.signal == SignalConfig::Stereo;
+            const int count = port.channelCount();
+            for (int i = 0; i < count; ++i) {
+                Channel ch;
+                ch.number = next;
+                ch.source = device->label();
+                if (stereo) {
+                    ch.signal = (i == 0) ? QStringLiteral("L") : QStringLiteral("R");
+                    ch.source += (i == 0) ? QStringLiteral(" (L)") : QStringLiteral(" (R)");
+                } else {
+                    ch.signal = QStringLiteral("Mono");
+                }
+                ch.connector = ports::display(port.connector);
+                ch.level = ports::display(port.level);
+                ch.balanced = port.balanced;
+                ch.phantom = port.phantom;
+                ch.providedBy = ports::display(port.providedBy);
+                ch.notes = port.notes;
+                m_channels.append(ch);
+                deviceNumbers.append(next);
+                ++next;
+            }
+        }
+
+        // Badge: compact form — "" / "3" / "3–4" (contiguous) / "3,5".
+        QString badge;
+        if (deviceNumbers.size() == 1) {
+            badge = QString::number(deviceNumbers.first());
+        } else if (deviceNumbers.size() > 1) {
+            const bool contiguous =
+                deviceNumbers.last() - deviceNumbers.first() == deviceNumbers.size() - 1;
+            if (contiguous)
+                badge = QStringLiteral("%1–%2").arg(deviceNumbers.first()).arg(deviceNumbers.last());
+            else {
+                QStringList parts;
+                for (int n : deviceNumbers)
+                    parts << QString::number(n);
+                badge = parts.join(QLatin1Char(','));
+            }
+        }
+        device->setChannelBadge(badge);
+    }
+
+    emit channelsChanged();
+}
+
+void StageScene::dragEnterEvent(QGraphicsSceneDragDropEvent *event)
+{
+    if (event->mimeData()->hasFormat(QString::fromLatin1(kDeviceMimeType)))
+        event->acceptProposedAction();
+    else
+        QGraphicsScene::dragEnterEvent(event);
+}
+
+void StageScene::dragMoveEvent(QGraphicsSceneDragDropEvent *event)
+{
+    if (event->mimeData()->hasFormat(QString::fromLatin1(kDeviceMimeType)))
+        event->acceptProposedAction();
+    else
+        QGraphicsScene::dragMoveEvent(event);
+}
+
+void StageScene::dropEvent(QGraphicsSceneDragDropEvent *event)
+{
+    const QMimeData *mime = event->mimeData();
+    if (!mime->hasFormat(QString::fromLatin1(kDeviceMimeType))) {
+        QGraphicsScene::dropEvent(event);
+        return;
+    }
+    const QString typeId =
+        QString::fromUtf8(mime->data(QString::fromLatin1(kDeviceMimeType)));
+    if (addDevice(typeId, event->scenePos()))
+        event->acceptProposedAction();
+}
+
+void StageScene::drawBackground(QPainter *painter, const QRectF &rect)
+{
+    painter->fillRect(rect, QColor(0xd6, 0xd8, 0xdb));   // canvas surround
+
+    painter->setRenderHint(QPainter::Antialiasing, false);
+    painter->fillRect(m_pageRect, Qt::white);            // the page
+
+    QPen border(QColor(0x9a, 0x9d, 0xa1));
+    border.setCosmetic(true);
+    painter->setPen(border);
+    painter->setBrush(Qt::NoBrush);
+    painter->drawRect(m_pageRect);
+}
+
+void StageScene::setDocumentInfo(const DocumentInfo &info)
+{
+    m_documentInfo = info;
+    enforceHeaderClearance();
+    update();
+}
+
+bool StageScene::titleBlockShown() const
+{
+    return m_documentInfo.hasContent() || m_documentInfo.date.isValid();
+}
+
+qreal StageScene::contentTop() const
+{
+    return titleBlockShown() ? m_pageRect.top() + kHeaderReserved : m_pageRect.top();
+}
+
+void StageScene::enforceHeaderClearance()
+{
+    const qreal top = contentTop();
+    const QList<QGraphicsItem *> all = items();
+    for (QGraphicsItem *gi : all) {
+        if (gi->type() != DeviceItem::Type)
+            continue;
+        const qreal minY = top - gi->boundingRect().top();
+        if (gi->pos().y() < minY)
+            gi->setPos(gi->pos().x(), minY);  // itemChange re-clamps; this nudges down
+    }
+}
+
+void StageScene::drawForeground(QPainter *painter, const QRectF &rect)
+{
+    QGraphicsScene::drawForeground(painter, rect);
+
+    if (!titleBlockShown())
+        return;
+
+    // Letterhead-style title block across the top of the page.
+    const QRectF band(m_pageRect.left() + kHeaderPad, m_pageRect.top() + kHeaderPad,
+                      m_pageRect.width() - 2 * kHeaderPad, kHeaderHeight);
+
+    painter->save();
+    // Opaque strip so devices don't bleed into the header.
+    painter->fillRect(QRectF(m_pageRect.left(), m_pageRect.top(),
+                             m_pageRect.width(), kHeaderHeight + 2 * kHeaderPad),
+                      Qt::white);
+    drawTitleBlock(*painter, band, m_documentInfo, QString());
+    painter->restore();
+}

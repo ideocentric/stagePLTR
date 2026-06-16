@@ -1,0 +1,35 @@
+<!DOCTYPE RCC>
+<!--
+  Qt resource bundle for stagePLTR.
+
+  Built-in assets are compiled into the binary. Paths are relative to this file
+  (the project root); the alias is how they're addressed at runtime.
+
+  Add a plot symbol:
+    1. drop the SVG in assets/plot/
+    2. add a <file> line below
+    3. add a matching entry to assets/plot/catalog.json
+  Access at runtime via ":/plot/<alias>".
+-->
+<RCC>
+    <qresource prefix="/plot">
+        <file alias="catalog.json">assets/plot/catalog.json</file>
+        <file alias="mic-straight-overhead.svg">assets/plot/mic-straight-overhead.svg</file>
+        <file alias="mic-boom-left-overhead.svg">assets/plot/mic-boom-left-overhead.svg</file>
+        <file alias="mic-boom-right-overhead.svg">assets/plot/mic-boom-right-overhead.svg</file>
+        <file alias="mic-boom-left-perp-overhead.svg">assets/plot/mic-boom-left-perp-overhead.svg</file>
+        <file alias="mic-boom-right-perp-overhead.svg">assets/plot/mic-boom-right-perp-overhead.svg</file>
+        <file alias="amp-small-overhead.svg">assets/plot/amp-small-overhead.svg</file>
+        <file alias="amp-medium-overhead.svg">assets/plot/amp-medium-overhead.svg</file>
+        <file alias="amp-halfstack-overhead.svg">assets/plot/amp-halfstack-overhead.svg</file>
+        <file alias="synth-25-overhead.svg">assets/plot/synth-25-overhead.svg</file>
+        <file alias="synth-61-overhead.svg">assets/plot/synth-61-overhead.svg</file>
+        <file alias="synth-88-overhead.svg">assets/plot/synth-88-overhead.svg</file>
+        <file alias="drumset-overhead.svg">assets/plot/drumset-overhead.svg</file>
+        <file alias="floor-tom-overhead.svg">assets/plot/floor-tom-overhead.svg</file>
+        <file alias="floor-monitor-overhead.svg">assets/plot/floor-monitor-overhead.svg</file>
+        <file alias="fx-mono-stereo-overhead.svg">assets/plot/fx-mono-stereo-overhead.svg</file>
+        <file alias="stage-rack-overhead.svg">assets/plot/stage-rack-overhead.svg</file>
+    </qresource>
+    <qresource prefix="/ui"/>
+</RCC>

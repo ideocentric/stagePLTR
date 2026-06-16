@@ -1,0 +1,73 @@
+/*
+ * stagePLTR — stage plots and tech riders for bands.
+ * Copyright (C) 2026 Matt Comeione
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef DEVICEITEM_H
+#define DEVICEITEM_H
+
+#include "devicetype.h"
+#include "ports.h"
+
+#include <QGraphicsObject>
+#include <QList>
+#include <QSizeF>
+#include <QString>
+
+class QSvgRenderer;
+
+// A device placed on the stage: renders its SVG symbol with a label below.
+// Movable, selectable, and rotatable. The origin (0,0) is the icon centre, so
+// rotation pivots about the symbol.
+class DeviceItem : public QGraphicsObject
+{
+    Q_OBJECT
+
+public:
+    explicit DeviceItem(const DeviceType &type, QGraphicsItem *parent = nullptr);
+
+    enum { Type = UserType + 1 };
+    int type() const override { return Type; }
+
+    QString typeId() const { return m_typeId; }
+
+    QString label() const { return m_label; }
+    void setLabel(const QString &label);
+
+    const QList<Port> &ports() const { return m_ports; }
+    void setPorts(const QList<Port> &ports);
+
+    // Compact channel-number string drawn as a badge (e.g. "3" or "3–4"),
+    // assigned by the scene during renumbering. Empty = no badge.
+    void setChannelBadge(const QString &badge);
+
+    QRectF boundingRect() const override;
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
+               QWidget *widget) override;
+
+protected:
+    QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
+
+private:
+    QString m_typeId;
+    QString m_label;
+    QSizeF m_iconSize;
+    QList<Port> m_ports;
+    QString m_channelBadge;
+    QSvgRenderer *m_renderer = nullptr;  // owned (child QObject)
+};
+
+#endif // DEVICEITEM_H

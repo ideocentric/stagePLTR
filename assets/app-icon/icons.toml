@@ -1,0 +1,61 @@
+# iconsmaker configuration for stagePLTR
+# Tool: https://… (iconsmaker, Rust) — local: /Users/matt/RustroverProjects/iconsmaker
+#
+# Run from the PROJECT ROOT (native Cargo):
+#   cargo run --manifest-path /Users/matt/RustroverProjects/iconsmaker/Cargo.toml -- \
+#       --config assets/app-icon/icons.toml --verbose
+#
+# Generated output is committed under assets/app-icon/generated/ (see [output]).
+
+# ── Application identity ───────────────────────────────────────────────────────
+[app]
+id               = "com.ideocentric.stagePLTR"   # reverse-DNS; also Flatpak/Snap/D-Bus ID
+name             = "stagePLTR"
+generic_name     = "Stage Plot Editor"
+comment          = "Create stage plots and tech riders for bands"
+exec             = "stagePLTR %F"
+categories       = ["AudioVideo", "Audio", "Music"]
+keywords         = ["stage", "plot", "tech", "rider", "band", "audio", "live", "sound"]
+startup_wm_class = "stagePLTR"                    # must match the app's WM_CLASS
+# mime_types     = ["application/x-stageplt"]     # parked: define once a save format
+                                                   # exists (program may be renamed first)
+
+license          = "GPL-3.0-or-later"
+metadata_license = "CC0-1.0"
+
+description      = "stagePLTR is an open-source tool for designing attractive stage plots and tech riders for bands."
+homepage_url     = "https://github.com/ideocentric/stagePLTR"
+developer_name   = "Matt Comeione"
+
+# ── Input artwork ─────────────────────────────────────────────────────────────
+[input]
+svg = "assets/app-icon/master.svg"                # 1024×1024, flat, text→outlines (add this file)
+# symbolic_svg = "assets/app-icon/symbolic.svg"   # optional 16×16 monochrome Linux tray variant
+
+# ── Output (committed; not the default top-level dist/) ───────────────────────
+[output]
+dir = "assets/app-icon/generated"
+
+# ── Platform targets ──────────────────────────────────────────────────────────
+[platforms]
+macos   = true
+windows = true
+linux   = true
+
+# ── macOS squircle / depth treatment ──────────────────────────────────────────
+[effects]
+squircle_power = 5.0    # 4 = classic squircle, 5 = macOS-like, 6+ = more rectangular
+squircle_depth = true   # SDF bevel: rim highlight top, shadow bottom (false = flat)
+gloss_strength = 0.35   # 0.0 flat → 1.0 max
+depth_blur     = 0.12   # lighting-map blur: 0.0 sharp → 0.30 very soft
+
+# ── Linux icon sizes ──────────────────────────────────────────────────────────
+[linux]
+hicolor_sizes = [16, 22, 24, 32, 48, 64, 128, 256, 512]
+
+# ── Extra packaging bundles (enable when targeting these stores) ──────────────
+[packaging]
+snap     = false
+flatpak  = false
+appimage = false
+deb      = false

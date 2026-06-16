@@ -1,0 +1,105 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "macos",
+      "displayName": "macOS (Qt6 via Homebrew)",
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QT_PREFIX}"
+      },
+      "environment": {
+        "QT_PREFIX": "/opt/homebrew/opt/qt"
+      }
+    },
+    {
+      "name": "windows",
+      "displayName": "Windows (Qt6 MSVC)",
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QT_PREFIX}"
+      },
+      "environment": {
+        "QT_PREFIX": "C:/Qt/6.7.0/msvc2022_64"
+      }
+    },
+    {
+      "name": "linux",
+      "displayName": "Linux (Qt6)",
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QT_PREFIX}"
+      },
+      "environment": {
+        "QT_PREFIX": "/usr/lib/qt6"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macos-debug",
+      "displayName": "macOS Debug",
+      "configurePreset": "macos",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-release",
+      "displayName": "macOS Release",
+      "configurePreset": "macos",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Windows Debug",
+      "configurePreset": "windows",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows Release",
+      "configurePreset": "windows",
+      "configuration": "Release"
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux Debug",
+      "configurePreset": "linux",
+      "configuration": "Debug"
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux Release",
+      "configurePreset": "linux",
+      "configuration": "Release"
+    }
+  ]
+}
