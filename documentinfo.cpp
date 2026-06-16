@@ -36,6 +36,10 @@ QJsonObject DocumentInfo::toJson() const
         obj[QStringLiteral("logo")] = QString::fromLatin1(logoData.toBase64());
         obj[QStringLiteral("logoFormat")] = logoFormat;
     }
+    if (showPhantomInList)
+        obj[QStringLiteral("showPhantomInList")] = true;
+    if (allowListOverflow)
+        obj[QStringLiteral("allowListOverflow")] = true;
     return obj;
 }
 
@@ -51,6 +55,8 @@ DocumentInfo DocumentInfo::fromJson(const QJsonObject &obj)
         info.logoData = QByteArray::fromBase64(logo.toLatin1());
         info.logoFormat = obj.value(QStringLiteral("logoFormat")).toString();
     }
+    info.showPhantomInList = obj.value(QStringLiteral("showPhantomInList")).toBool();
+    info.allowListOverflow = obj.value(QStringLiteral("allowListOverflow")).toBool();
     return info;
 }
 

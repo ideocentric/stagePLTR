@@ -19,80 +19,33 @@
 #include "pdfexporter.h"
 
 #include "documentinfo.h"
+#include "inputlist.h"
+#include "pageconfig.h"
 #include "stagescene.h"
 
 #include <QFont>
 #include <QFontMetricsF>
 #include <QGraphicsItem>
 #include <QList>
+#include <QObject>
 #include <QPageLayout>
 #include <QPageSize>
 #include <QPainter>
 #include <QPdfWriter>
 #include <QSignalBlocker>
-#include <QStringList>
-#include <QVector>
 
 namespace {
 
-struct ColumnSpec
+// Render the scene's page (header, plot, on-page legend, footer) into `area`
+// without disturbing the live selection.
+void renderScenePage(QPainter &p, StageScene *scene, const QRectF &area)
 {
-    QString heading;
-    double weight;        // fraction of the table width
-    int alignment;        // Qt::Alignment flags
-};
-
-const QVector<ColumnSpec> &columns()
-{
-    static const QVector<ColumnSpec> cols = {
-        {QStringLiteral("Ch"), 0.05, Qt::AlignCenter},
-        {QStringLiteral("Source"), 0.20, Qt::AlignLeft | Qt::AlignVCenter},
-        {QStringLiteral("Connector"), 0.11, Qt::AlignLeft | Qt::AlignVCenter},
-        {QStringLiteral("Signal"), 0.07, Qt::AlignCenter},
-        {QStringLiteral("Level"), 0.09, Qt::AlignLeft | Qt::AlignVCenter},
-        {QStringLiteral("Bal."), 0.07, Qt::AlignCenter},
-        {QStringLiteral("+48V"), 0.06, Qt::AlignCenter},
-        {QStringLiteral("Provided By"), 0.12, Qt::AlignLeft | Qt::AlignVCenter},
-        {QStringLiteral("Notes"), 0.23, Qt::AlignLeft | Qt::AlignVCenter},
-    };
-    return cols;
-}
-
-QStringList cellsFor(const Channel &ch)
-{
-    return {QString::number(ch.number),
-            ch.source,
-            ch.connector,
-            ch.signal,
-            ch.level,
-            ch.balanced ? QStringLiteral("Bal") : QStringLiteral("Unbal"),
-            ch.phantom ? QStringLiteral("+48V") : QString(),
-            ch.providedBy,
-            ch.notes};
-}
-
-// Draws the table header row at y and returns the y below it.
-double drawTableHeader(QPainter &p, const QRectF &area, double y, double rowH,
-                       const QVector<double> &x)
-{
-    QFont headFont = p.font();
-    headFont.setPointSize(9);
-    headFont.setBold(true);
-    p.setFont(headFont);
-
-    const QRectF headerRect(area.left(), y, area.width(), rowH);
-    p.fillRect(headerRect, QColor(0xe8, 0xea, 0xed));
-
-    const auto &cols = columns();
-    const double pad = rowH * 0.25;
-    p.setPen(QColor(0x33, 0x33, 0x33));
-    for (int c = 0; c < cols.size(); ++c) {
-        const QRectF cell(x[c], y, x[c + 1] - x[c], rowH);
-        p.drawText(cell.adjusted(pad, 0, -pad, 0), cols[c].alignment, cols[c].heading);
-    }
-    p.setPen(QPen(QColor(0x88, 0x8a, 0x8d), 0));
-    p.drawRect(headerRect);
-    return y + rowH;
+    const QList<QGraphicsItem *> previouslySelected = scene->selectedItems();
+    const QSignalBlocker blocker(scene);
+    scene->clearSelection();
+    scene->render(&p, area, scene->pageRect(), Qt::KeepAspectRatio);
+    for (QGraphicsItem *item : previouslySelected)
+        item->setSelected(true);
 }
 
 } // namespace
@@ -127,73 +80,43 @@ bool exportPlot(const QString &path, StageScene *scene, const QString &title, QS
     p.setRenderHint(QPainter::Antialiasing, true);
 
     const QRectF area(0, 0, writer.width(), writer.height());
-    const double headerH = area.height() * 0.09;
 
-    // ---- Page 1: the stage plot (its title block is drawn by the scene) ------
-    // Render the page region without selection highlights (signals blocked so
-    // the UI's selection/properties state is untouched).
-    const QList<QGraphicsItem *> previouslySelected = scene->selectedItems();
-    {
-        const QSignalBlocker blocker(scene);
-        scene->clearSelection();
-        scene->render(&p, area, scene->pageRect(), Qt::KeepAspectRatio);
-        for (QGraphicsItem *item : previouslySelected)
-            item->setSelected(true);
-    }
+    const DocumentInfo info = scene->documentInfo();
+    const QList<InputListEntry> entries = scene->inputListEntries();
+    const int columns = inputlist::columnsFor(page.orientation);
+    const bool overflow = scene->inputListShownCount() < entries.size();
 
-    // ---- Page 2+: the input list --------------------------------------------
-    writer.newPage();
-    const double titleH = headerH * 1.25;
-    drawTitleBlock(p, QRectF(area.left(), area.top(), area.width(), headerH),
-                   scene->documentInfo(), QStringLiteral("Input List"));
+    if (overflow && info.allowListOverflow) {
+        // Big-rig split: the diagram gets its own page, the input-list legend
+        // continues on following page(s).
+        scene->setInputListVisible(false);
+        renderScenePage(p, scene, area);
+        scene->setInputListVisible(true);
 
-    QFont bodyFont = p.font();
-    bodyFont.setPointSize(9);
-    const double rowH = QFontMetricsF(bodyFont, p.device()).height() * 1.6;
+        const double headerH = area.height() * 0.09;
+        const double titleH = headerH * 1.25;
+        QFont bodyFont = p.font();
+        bodyFont.setPointSize(9);
+        const double rowH = QFontMetricsF(bodyFont, p.device()).height() * 1.6;
 
-    // Precompute column x-edges.
-    const auto &cols = columns();
-    QVector<double> x(cols.size() + 1);
-    x[0] = area.left();
-    for (int c = 0; c < cols.size(); ++c)
-        x[c + 1] = x[c] + cols[c].weight * area.width();
-
-    double y = area.top() + titleH;
-    y = drawTableHeader(p, area, y, rowH, x);
-
-    const QList<Channel> chans = scene->channels();
-    if (chans.isEmpty()) {
-        p.setFont(bodyFont);
-        p.setPen(QColor(0x66, 0x66, 0x66));
-        p.drawText(QRectF(area.left(), y, area.width(), rowH),
-                   Qt::AlignLeft | Qt::AlignVCenter,
-                   QStringLiteral("  No console channels yet."));
-    }
-
-    const double pad = rowH * 0.25;
-    p.setFont(bodyFont);
-    for (const Channel &ch : chans) {
-        if (y + rowH > area.bottom()) {
+        int idx = 0;
+        bool firstLegendPage = true;
+        while (idx < entries.size()) {
             writer.newPage();
             drawTitleBlock(p, QRectF(area.left(), area.top(), area.width(), headerH),
-                           scene->documentInfo(), QStringLiteral("Input List (cont.)"));
-            y = area.top() + titleH;
-            y = drawTableHeader(p, area, y, rowH, x);
-            p.setFont(bodyFont);
+                           info, firstLegendPage ? QObject::tr("Input List")
+                                                 : QObject::tr("Input List (cont.)"));
+            const QRectF listArea(area.left(), area.top() + titleH, area.width(),
+                                  area.bottom() - (area.top() + titleH));
+            idx = inputlist::draw(&p, listArea, entries, columns, rowH,
+                                  info.showPhantomInList, idx);
+            firstLegendPage = false;
         }
-
-        const QStringList cells = cellsFor(ch);
-        QFontMetricsF fm(bodyFont, p.device());
-        for (int c = 0; c < cols.size(); ++c) {
-            const QRectF cell(x[c], y, x[c + 1] - x[c], rowH);
-            const QRectF textRect = cell.adjusted(pad, 0, -pad, 0);
-            p.setPen(QColor(0x22, 0x22, 0x22));
-            p.drawText(textRect, cols[c].alignment,
-                       fm.elidedText(cells.at(c), Qt::ElideRight, textRect.width()));
-            p.setPen(QPen(QColor(0xcc, 0xcc, 0xcc), 0));
-            p.drawRect(cell);
-        }
-        y += rowH;
+    } else {
+        // Everything (or as much as fits) on a single page — matches the canvas.
+        // When it overflows but overflow isn't allowed, the scene draws a
+        // "+N more" note rather than spilling onto another page.
+        renderScenePage(p, scene, area);
     }
 
     p.end();

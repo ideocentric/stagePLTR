@@ -44,6 +44,12 @@ constexpr qreal kHeaderPad = 16.0;
 // Vertical space devices must stay below when a letterhead is shown.
 constexpr qreal kHeaderReserved = kHeaderHeight + 2 * kHeaderPad + 4.0;
 constexpr qreal kFooterHeight = 22.0;  // small centred date strip at the bottom
+
+// On-page condensed input-list legend (below the plot, above the footer).
+constexpr qreal kListRowH = 16.0;      // one condensed line, in scene pixels
+constexpr qreal kListTitleH = 20.0;    // "Input List" caption + divider
+constexpr qreal kListPad = 8.0;        // gap between stage area and the legend
+constexpr qreal kListMaxFrac = 0.42;   // legend never takes more than this much
 }
 
 StageScene::StageScene(const DeviceCatalog *catalog, QObject *parent)
@@ -59,7 +65,47 @@ void StageScene::setPageConfig(const PageConfig &config)
     const QSizeF px = config.pixelSize();
     m_pageRect = QRectF(0.0, 0.0, px.width(), px.height());
     setSceneRect(m_pageRect.adjusted(-kMargin, -kMargin, kMargin, kMargin));
-    enforceHeaderClearance();  // keep devices below the (possibly moved) header
+    enforceContentBounds();  // keep devices clear of the (possibly moved) header/legend
+    update();
+}
+
+int StageScene::inputListColumns() const
+{
+    return inputlist::columnsFor(m_pageConfig.orientation);
+}
+
+qreal StageScene::inputListBandTop() const
+{
+    const qreal footerTop = m_pageRect.bottom() - kFooterHeight;
+    if (m_listEntries.isEmpty() || !m_inputListVisible)
+        return footerTop;
+    const int cols = inputListColumns();
+    const int rows = (m_listEntries.size() + cols - 1) / cols;
+    qreal height = kListTitleH + rows * kListRowH + kListPad;
+    height = qMin(height, m_pageRect.height() * kListMaxFrac);
+    return footerTop - height;
+}
+
+QRectF StageScene::inputListRect() const
+{
+    const qreal top = inputListBandTop() + kListTitleH;
+    const qreal bottom = m_pageRect.bottom() - kFooterHeight;
+    return QRectF(m_pageRect.left() + kHeaderPad, top,
+                  m_pageRect.width() - 2 * kHeaderPad, qMax(0.0, bottom - top));
+}
+
+int StageScene::inputListShownCount() const
+{
+    // Null painter => measure only: returns the count that fits in the band.
+    return inputlist::draw(nullptr, inputListRect(), m_listEntries, inputListColumns(),
+                           kListRowH, m_documentInfo.showPhantomInList, 0);
+}
+
+void StageScene::setInputListVisible(bool visible)
+{
+    if (m_inputListVisible == visible)
+        return;
+    m_inputListVisible = visible;
     update();
 }
 
@@ -193,6 +239,7 @@ bool StageScene::fromJson(const QJsonObject &obj, QString *error)
 void StageScene::renumberChannels()
 {
     m_channels.clear();
+    m_listEntries.clear();
     int next = 1;
 
     const QList<QGraphicsItem *> all = items(Qt::AscendingOrder);
@@ -207,6 +254,7 @@ void StageScene::renumberChannels()
                 continue;
             const bool stereo = port.signal == SignalConfig::Stereo;
             const int count = port.channelCount();
+            const int portFirst = next;
             for (int i = 0; i < count; ++i) {
                 Channel ch;
                 ch.number = next;
@@ -227,6 +275,17 @@ void StageScene::renumberChannels()
                 deviceNumbers.append(next);
                 ++next;
             }
+
+            // One condensed legend entry per console port; stereo is a range.
+            InputListEntry entry;
+            entry.numbers = (count > 1)
+                ? QStringLiteral("%1–%2").arg(portFirst).arg(next - 1)
+                : QString::number(portFirst);
+            entry.signalWord = stereo ? tr("Stereo") : tr("Mono");
+            entry.connector = ports::display(port.connector);
+            entry.level = ports::display(port.level);
+            entry.phantom = port.phantom;
+            m_listEntries.append(entry);
         }
 
         // Badge: compact form — "" / "3" / "3–4" (contiguous) / "3,5".
@@ -248,6 +307,8 @@ void StageScene::renumberChannels()
         device->setChannelBadge(badge);
     }
 
+    // The legend size changed, so the stage area's bottom moved.
+    enforceContentBounds();
     emit channelsChanged();
 }
 
@@ -297,7 +358,7 @@ void StageScene::drawBackground(QPainter *painter, const QRectF &rect)
 void StageScene::setDocumentInfo(const DocumentInfo &info)
 {
     m_documentInfo = info;
-    enforceHeaderClearance();
+    enforceContentBounds();
     update();
 }
 
@@ -319,16 +380,27 @@ qreal StageScene::contentTop() const
     return headerShown() ? m_pageRect.top() + kHeaderReserved : m_pageRect.top();
 }
 
-void StageScene::enforceHeaderClearance()
+qreal StageScene::contentBottom() const
+{
+    // Stage area ends above the on-page legend (or the footer when there's none).
+    return inputListBandTop() - kListPad;
+}
+
+void StageScene::enforceContentBounds()
 {
     const qreal top = contentTop();
+    const qreal bottom = contentBottom();
     const QList<QGraphicsItem *> all = items();
     for (QGraphicsItem *gi : all) {
         if (gi->type() != DeviceItem::Type)
             continue;
-        const qreal minY = top - gi->boundingRect().top();
-        if (gi->pos().y() < minY)
-            gi->setPos(gi->pos().x(), minY);  // itemChange re-clamps; this nudges down
+        const QRectF br = gi->boundingRect();
+        const qreal minY = top - br.top();
+        const qreal maxY = bottom - br.bottom();
+        // itemChange re-clamps too; this nudges existing devices into range.
+        const qreal y = qBound(minY, gi->pos().y(), qMax(minY, maxY));
+        if (gi->pos().y() != y)
+            gi->setPos(gi->pos().x(), y);
     }
 }
 
@@ -336,8 +408,53 @@ void StageScene::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsScene::drawForeground(painter, rect);
     drawHeader(*painter);
+    drawInputList(*painter);
     drawFooter(*painter);
     Q_UNUSED(rect);
+}
+
+void StageScene::drawInputList(QPainter &painter) const
+{
+    if (m_listEntries.isEmpty() || !m_inputListVisible)
+        return;
+
+    const qreal bandTop = inputListBandTop();
+    const QRectF area = inputListRect();
+    painter.save();
+
+    // Divider + caption above the columns.
+    QPen rule(QColor(0xb5, 0xb8, 0xbb));
+    rule.setCosmetic(true);
+    painter.setPen(rule);
+    painter.drawLine(QPointF(m_pageRect.left() + kHeaderPad, bandTop),
+                     QPointF(m_pageRect.right() - kHeaderPad, bandTop));
+    QFont caption = painter.font();
+    caption.setPixelSize(11);
+    caption.setBold(true);
+    painter.setFont(caption);
+    painter.setPen(QColor(0x44, 0x47, 0x4a));
+    painter.drawText(QRectF(m_pageRect.left() + kHeaderPad, bandTop + 2.0,
+                            m_pageRect.width() - 2 * kHeaderPad, kListTitleH - 2.0),
+                     Qt::AlignLeft | Qt::AlignVCenter, tr("Input List"));
+
+    const int shown = inputlist::draw(&painter, area, m_listEntries, inputListColumns(),
+                                      kListRowH, m_documentInfo.showPhantomInList, 0);
+    if (shown < m_listEntries.size()) {
+        // Tell the user the rest continues on the exported legend page(s).
+        QFont note = painter.font();
+        note.setPixelSize(9);
+        note.setBold(false);
+        note.setItalic(true);
+        painter.setFont(note);
+        painter.setPen(QColor(0x90, 0x93, 0x96));
+        painter.drawText(QRectF(m_pageRect.left() + kHeaderPad,
+                                m_pageRect.bottom() - kFooterHeight - 12.0,
+                                m_pageRect.width() - 2 * kHeaderPad, 12.0),
+                         Qt::AlignRight | Qt::AlignVCenter,
+                         tr("+%1 more (see additional pages)")
+                             .arg(m_listEntries.size() - shown));
+    }
+    painter.restore();
 }
 
 void StageScene::drawHeader(QPainter &painter) const

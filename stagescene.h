@@ -20,6 +20,7 @@
 #define STAGESCENE_H
 
 #include "documentinfo.h"
+#include "inputlist.h"
 #include "pageconfig.h"
 
 #include <QGraphicsScene>
@@ -80,13 +81,23 @@ public:
     void renumberChannels();
     const QList<Channel> &channels() const { return m_channels; }
 
+    // Condensed input-list entries (stereo grouped), for the on-page legend and
+    // the PDF. Built alongside renumberChannels() so they match the badges.
+    const QList<InputListEntry> &inputListEntries() const { return m_listEntries; }
+    int inputListColumns() const;       // by orientation: 2 portrait, 4 landscape
+    QRectF inputListRect() const;       // entry area of the on-page legend band
+    int inputListShownCount() const;    // entries that fit in the on-page legend
+    // Suppress the on-page legend (used when the PDF splits plot/legend pages).
+    void setInputListVisible(bool visible);
+
     // Document metadata for the title block (drawn at the top of the page).
     void setDocumentInfo(const DocumentInfo &info);
     const DocumentInfo &documentInfo() const { return m_documentInfo; }
 
-    // Top of the usable area: below the title-block letterhead when shown.
-    // Devices are kept below this line so the header never covers them.
+    // The usable stage area for devices, kept clear of the letterhead (top) and
+    // the on-page input-list legend (bottom).
     qreal contentTop() const;
+    qreal contentBottom() const;
 
 signals:
     // Emitted on any user-visible content change (add / move / rotate / delete).
@@ -107,15 +118,19 @@ protected:
 private:
     bool headerShown() const;          // a logo or band name is set
     QRectF headerRect() const;         // top-of-page letterhead band
+    qreal inputListBandTop() const;    // top of the on-page legend (incl. title)
     void drawHeader(QPainter &painter) const;
     void drawFooter(QPainter &painter) const;
-    void enforceHeaderClearance();
+    void drawInputList(QPainter &painter) const;
+    void enforceContentBounds();       // clamp devices to [contentTop, contentBottom]
 
     const DeviceCatalog *m_catalog;
     PageConfig m_pageConfig;
     QRectF m_pageRect;
     QList<Channel> m_channels;
+    QList<InputListEntry> m_listEntries;
     DocumentInfo m_documentInfo;
+    bool m_inputListVisible = true;
 };
 
 #endif // STAGESCENE_H

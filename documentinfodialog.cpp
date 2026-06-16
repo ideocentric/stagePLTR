@@ -18,6 +18,7 @@
 
 #include "documentinfodialog.h"
 
+#include <QCheckBox>
 #include <QDateEdit>
 #include <QDialogButtonBox>
 #include <QFile>
@@ -70,10 +71,18 @@ DocumentInfoDialog::DocumentInfoDialog(const DocumentInfo &info, QWidget *parent
     logoRow->addLayout(logoButtons);
     logoRow->addStretch();
 
+    m_showPhantom = new QCheckBox(tr("Show +48V on the input list"));
+    m_showPhantom->setChecked(info.showPhantomInList);
+    m_allowOverflow =
+        new QCheckBox(tr("Allow a large input list to overflow onto its own page(s)"));
+    m_allowOverflow->setChecked(info.allowListOverflow);
+
     auto *form = new QFormLayout;
     form->addRow(tr("Band name:"), m_bandName);
     form->addRow(tr("Date:"), m_date);
     form->addRow(tr("Logo:"), logoRow);
+    form->addRow(tr("Input list:"), m_showPhantom);
+    form->addRow(QString(), m_allowOverflow);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
@@ -98,6 +107,8 @@ DocumentInfo DocumentInfoDialog::info() const
     info.date = m_date->date();
     info.logoData = m_logoData;
     info.logoFormat = m_logoFormat;
+    info.showPhantomInList = m_showPhantom->isChecked();
+    info.allowListOverflow = m_allowOverflow->isChecked();
     return info;
 }
 

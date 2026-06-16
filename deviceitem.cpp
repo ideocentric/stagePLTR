@@ -66,14 +66,15 @@ void DeviceItem::setPorts(const QList<Port> &ports)
 
 QVariant DeviceItem::itemChange(GraphicsItemChange change, const QVariant &value)
 {
-    // Keep the item below the title-block letterhead so the header never
-    // covers a device.
+    // Keep the item within the stage area: below the letterhead (top) and above
+    // the on-page input-list legend (bottom).
     if (change == ItemPositionChange) {
         if (auto *stage = qobject_cast<StageScene *>(scene())) {
             QPointF pos = value.toPointF();
-            const qreal minY = stage->contentTop() - boundingRect().top();
-            if (pos.y() < minY)
-                pos.setY(minY);
+            const QRectF br = boundingRect();
+            const qreal minY = stage->contentTop() - br.top();
+            const qreal maxY = stage->contentBottom() - br.bottom();
+            pos.setY(qBound(minY, pos.y(), qMax(minY, maxY)));
             return pos;
         }
     }

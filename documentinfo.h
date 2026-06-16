@@ -36,6 +36,11 @@ struct DocumentInfo
     QByteArray logoData;    // raw image bytes (empty = no logo)
     QString logoFormat;     // lowercased suffix: "svg", "png", "jpg", …
 
+    // Input-list options (per document, since they depend on the band's gear /
+    // the size of the rig).
+    bool showPhantomInList = false;  // surface +48V on channels that carry it
+    bool allowListOverflow = false;  // split plot/legend onto separate PDF pages
+
     bool hasLogo() const { return !logoData.isEmpty(); }
     bool hasContent() const { return !bandName.isEmpty() || hasLogo(); }
 

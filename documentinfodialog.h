@@ -26,6 +26,7 @@
 class QLineEdit;
 class QDateEdit;
 class QLabel;
+class QCheckBox;
 
 // Edits a DocumentInfo: band name, date, and an embedded logo (the logo
 // replaces the band name in the title block when set).
@@ -46,6 +47,8 @@ private:
     QLineEdit *m_bandName = nullptr;
     QDateEdit *m_date = nullptr;
     QLabel *m_logoPreview = nullptr;
+    QCheckBox *m_showPhantom = nullptr;
+    QCheckBox *m_allowOverflow = nullptr;
 
     QByteArray m_logoData;
     QString m_logoFormat;
