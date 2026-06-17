@@ -47,10 +47,17 @@ public:
     const QList<DeviceType> &devices() const { return m_devices; }
     const DeviceType *find(const QString &id) const;
     QStringList categories() const;  // unique, in first-seen order
+
+    // Palette sections in display order: the catalog's "categories" array
+    // (which may include sections that have no devices yet), with any leftover
+    // device categories appended. Falls back to categories() when unspecified.
+    QStringList orderedCategories() const;
+
     bool isEmpty() const { return m_devices.isEmpty(); }
 
 private:
     QList<DeviceType> m_devices;
+    QStringList m_categoryOrder;  // from the catalog's "categories" array
 };
 
 #endif // DEVICECATALOG_H

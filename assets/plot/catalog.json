@@ -1,6 +1,17 @@
 {
   "version": 1,
-  "comment": "Device catalog for stagePLTR. 'icon' is a filename in assets/plot/ (bundled into the Qt resource system as :/plot/<icon>). 'defaultSize' is the on-canvas size in px; icons use a square 100x100 viewBox, so sizes are kept square to avoid distortion. 'ports' is the default connection template; an output with toConsole=true becomes a numbered channel (stereo = 2). Mic'd sources (amps, drums) have no console output by default — place a mic on them; amps include an optional Direct Out (toConsole=false).",
+  "comment": "Device catalog for stagePLTR. 'categories' lists the palette sections in display order (sections with no devices yet, e.g. People/DJ, still appear). 'icon' is a filename in assets/plot/ (bundled into the Qt resource system as :/plot/<icon>). 'defaultSize' is the on-canvas size in px; icons use a square 100x100 viewBox, so sizes are kept square to avoid distortion. 'ports' is the default connection template; an output with toConsole=true becomes a numbered channel (stereo = 2). Mic'd sources (amps, drums) have no console output by default — place a mic on them; amps include an optional Direct Out (toConsole=false).",
+  "categories": [
+    "Keyboards",
+    "Amplifiers",
+    "Microphones",
+    "Drums and Percussion",
+    "Monitors",
+    "Racks",
+    "Effects",
+    "People",
+    "DJ"
+  ],
   "devices": [
     {
       "id": "mic-straight-overhead",
@@ -85,7 +96,7 @@
     {
       "id": "synth-25-overhead",
       "name": "Synth (25-key)",
-      "category": "Keys",
+      "category": "Keyboards",
       "icon": "synth-25-overhead.svg",
       "defaultSize": [52, 52],
       "ports": [
@@ -95,7 +106,7 @@
     {
       "id": "synth-61-overhead",
       "name": "Synth (61-key)",
-      "category": "Keys",
+      "category": "Keyboards",
       "icon": "synth-61-overhead.svg",
       "defaultSize": [68, 68],
       "ports": [
@@ -105,7 +116,7 @@
     {
       "id": "synth-88-overhead",
       "name": "Synth (88-key)",
-      "category": "Keys",
+      "category": "Keyboards",
       "icon": "synth-88-overhead.svg",
       "defaultSize": [84, 84],
       "ports": [
@@ -115,7 +126,7 @@
     {
       "id": "drumset-overhead",
       "name": "Drum Set",
-      "category": "Drums",
+      "category": "Drums and Percussion",
       "icon": "drumset-overhead.svg",
       "defaultSize": [96, 96],
       "ports": []
@@ -123,7 +134,7 @@
     {
       "id": "floor-tom-overhead",
       "name": "Floor Tom",
-      "category": "Drums",
+      "category": "Drums and Percussion",
       "icon": "floor-tom-overhead.svg",
       "defaultSize": [44, 44],
       "ports": []

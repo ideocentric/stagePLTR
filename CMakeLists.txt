@@ -49,6 +49,8 @@ set(PROJECT_SOURCES
     # panels — docks, tables, dialogs
     src/panels/devicepalette.cpp
     src/panels/devicepalette.h
+    src/panels/devicelist.cpp
+    src/panels/devicelist.h
     src/panels/porteditor.cpp
     src/panels/porteditor.h
     src/panels/channeltablemodel.cpp

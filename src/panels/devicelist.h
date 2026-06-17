@@ -16,31 +16,36 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef DEVICEPALETTE_H
-#define DEVICEPALETTE_H
+#ifndef DEVICELIST_H
+#define DEVICELIST_H
 
-#include <QToolBox>
+#include <QListWidget>
 
-class DeviceCatalog;
+struct DeviceType;
 
-// Palette of available devices as a collapsible accordion: one section per
-// catalog category, each a draggable icon grid (see DeviceList). Drags carry
-// the DeviceType id; double-clicking an icon emits deviceActivated() so the
-// window can drop the device at the page centre.
-class DevicePalette : public QToolBox
+// A draggable icon grid of devices for one palette category. Drags carry the
+// DeviceType id (kDeviceMimeType); activating an item emits deviceActivated().
+// DevicePalette stacks one of these per category inside an accordion.
+class DeviceList : public QListWidget
 {
     Q_OBJECT
 
 public:
-    explicit DevicePalette(QWidget *parent = nullptr);
+    explicit DeviceList(QWidget *parent = nullptr);
 
-    void populate(const DeviceCatalog &catalog);
+    void addDevice(const DeviceType &type);
+    // A non-interactive, greyed hint shown in a category that has no devices yet.
+    void addPlaceholder(const QString &text);
 
 signals:
     void deviceActivated(const QString &typeId);
 
+protected:
+    QMimeData *mimeData(const QList<QListWidgetItem *> &items) const override;
+    QStringList mimeTypes() const override;
+
 private:
-    void clearSections();
+    static QString idOf(const QListWidgetItem *item);
 };
 
-#endif // DEVICEPALETTE_H
+#endif // DEVICELIST_H

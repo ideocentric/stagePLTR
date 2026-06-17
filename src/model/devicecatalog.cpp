@@ -42,6 +42,15 @@ bool DeviceCatalog::loadFromJson(const QByteArray &data,
         return false;
     }
 
+    QStringList categoryOrder;
+    const QJsonArray categoryArray =
+        doc.object().value(QStringLiteral("categories")).toArray();
+    for (const QJsonValue &value : categoryArray) {
+        const QString name = value.toString();
+        if (!name.isEmpty())
+            categoryOrder.append(name);
+    }
+
     const QJsonArray devices = doc.object().value(QStringLiteral("devices")).toArray();
     QList<DeviceType> parsed;
     parsed.reserve(devices.size());
@@ -77,6 +86,7 @@ bool DeviceCatalog::loadFromJson(const QByteArray &data,
     }
 
     m_devices = parsed;
+    m_categoryOrder = categoryOrder;
     return true;
 }
 
@@ -109,6 +119,24 @@ QStringList DeviceCatalog::categories() const
     for (const DeviceType &type : m_devices) {
         if (!seen.contains(type.category)) {
             seen.insert(type.category);
+            result.append(type.category);
+        }
+    }
+    return result;
+}
+
+QStringList DeviceCatalog::orderedCategories() const
+{
+    if (m_categoryOrder.isEmpty())
+        return categories();  // no explicit order: fall back to first-seen
+
+    // Start from the declared order, then append any device categories the
+    // catalog forgot to list, so nothing is silently hidden from the palette.
+    QStringList result = m_categoryOrder;
+    QSet<QString> known(m_categoryOrder.begin(), m_categoryOrder.end());
+    for (const DeviceType &type : m_devices) {
+        if (!known.contains(type.category)) {
+            known.insert(type.category);
             result.append(type.category);
         }
     }
