@@ -33,6 +33,7 @@ set(PROJECT_SOURCES
     src/canvas/deviceitem.h
 
     # model — data types + (de)serialization (and shared paint helpers)
+    src/model/channel.h
     src/model/devicetype.h
     src/model/devicecatalog.cpp
     src/model/devicecatalog.h

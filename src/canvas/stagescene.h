@@ -19,6 +19,7 @@
 #ifndef STAGESCENE_H
 #define STAGESCENE_H
 
+#include "channel.h"
 #include "documentinfo.h"
 #include "inputlist.h"
 #include "pageconfig.h"
@@ -37,21 +38,6 @@ class QJsonObject;
 //
 // MIME type for palette drops (carries a DeviceType id as UTF-8):
 extern const char *const kDeviceMimeType;
-
-// One row of the breakout / input list: a numbered console channel derived from
-// a device's console-bound output port. Fields are pre-formatted for display.
-struct Channel
-{
-    int number = 0;
-    QString source;       // device label (+ " (L)" / " (R)" for stereo)
-    QString connector;    // e.g. "XLR"
-    QString signal;       // "Mono", "L", or "R"
-    QString level;        // e.g. "Mic"
-    bool balanced = true;
-    bool phantom = false;
-    QString providedBy;   // "Band" / "Venue" / "—"
-    QString notes;
-};
 
 class StageScene : public QGraphicsScene
 {

@@ -19,7 +19,7 @@
 #ifndef CHANNELTABLEMODEL_H
 #define CHANNELTABLEMODEL_H
 
-#include "stagescene.h"  // Channel
+#include "channel.h"
 
 #include <QAbstractTableModel>
 #include <QList>
