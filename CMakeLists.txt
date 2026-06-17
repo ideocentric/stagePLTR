@@ -13,13 +13,15 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# Prefer Qt6; fall back to Qt5 if Qt6 isn't installed.
-find_package(Qt6 REQUIRED COMPONENTS Widgets Svg)
+option(STAGEPLT_BUILD_TESTS "Build the unit-test suite" ON)
 
+# Qt6 with Widgets/Svg; Test is used by the unit suite.
+find_package(Qt6 REQUIRED COMPONENTS Widgets Svg Test)
+
+# Everything except main.cpp and the resource bundle is built into a static
+# library so the app and the unit tests share one compiled copy of the code.
 # Sources are grouped by responsibility under src/ (see folder names below).
-set(PROJECT_SOURCES
-    src/main.cpp
-
+set(CORE_SOURCES
     # app shell — window, menus, wiring
     src/app/mainwindow.cpp
     src/app/mainwindow.h
@@ -63,34 +65,40 @@ set(PROJECT_SOURCES
     # export — output renderers
     src/export/pdfexporter.cpp
     src/export/pdfexporter.h
-
-    resources.qrc        # Qt resource bundle for assets/ (plot symbols, UI glyphs)
 )
 
 qt_standard_project_setup()
-qt_add_executable(stagePLTR
-    MANUAL_FINALIZATION
-    ${PROJECT_SOURCES}
+
+# Shared static library: the app and the tests both link this.
+qt_add_library(stageplt_core STATIC ${CORE_SOURCES})
+
+# Each source folder is on the public include path so headers stay addressable
+# by a bare name (e.g. #include "ports.h") regardless of which folder they live
+# in — for the library itself and for everything that links it.
+target_include_directories(stageplt_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/canvas
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/model
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/panels
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/export
 )
 
-# Add each source folder to the include path so headers stay addressable by a
-# bare name (e.g. #include "ports.h") regardless of which folder they live in.
-target_include_directories(stagePLTR PRIVATE
-    src
-    src/app
-    src/canvas
-    src/model
-    src/panels
-    src/export
-)
-
-# Mirror the on-disk folders in IDE project trees (CLion / Qt Creator).
-source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${PROJECT_SOURCES})
-
-target_link_libraries(stagePLTR PRIVATE
+target_link_libraries(stageplt_core PUBLIC
     Qt6::Widgets
     Qt6::Svg      # renders SVG plot symbols / UI glyphs
 )
+
+# Mirror the on-disk folders in IDE project trees (CLion / Qt Creator).
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/src FILES ${CORE_SOURCES})
+
+# The application: entry point + resources, linking the shared library.
+qt_add_executable(stagePLTR
+    MANUAL_FINALIZATION
+    src/main.cpp
+    resources.qrc        # Qt resource bundle for assets/ (plot symbols, UI glyphs)
+)
+target_link_libraries(stagePLTR PRIVATE stageplt_core)
 
 # Platform bundle/packaging properties.
 set_target_properties(stagePLTR PROPERTIES
@@ -109,3 +117,8 @@ install(TARGETS stagePLTR
 )
 
 qt_finalize_executable(stagePLTR)
+
+if(STAGEPLT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

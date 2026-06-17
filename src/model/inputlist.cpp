@@ -19,7 +19,6 @@
 #include "inputlist.h"
 
 #include <QFont>
-#include <QFontMetricsF>
 #include <QPainter>
 #include <QRectF>
 
@@ -49,14 +48,14 @@ int draw(QPainter *painter, const QRectF &area, const QList<InputListEntry> &ent
     const qreal colW = area.width() / columns;
     const qreal cellPad = colW * 0.04;
 
+    // Measure-only callers pass a null painter; keep that path free of any font
+    // construction so the layout/capacity math can run without a GUI app.
     if (painter) {
         QFont font = painter->font();
         font.setPixelSize(qMax(1, int(rowH * 0.62)));
         painter->setFont(font);
         painter->setPen(QColor(0x22, 0x22, 0x22));
     }
-    const QFontMetricsF fm = painter ? QFontMetricsF(painter->font(), painter->device())
-                                     : QFontMetricsF(QFont());
 
     int idx = start;
     for (int c = 0; c < columns && idx < entries.size(); ++c) {
@@ -65,9 +64,8 @@ int draw(QPainter *painter, const QRectF &area, const QList<InputListEntry> &ent
                 continue;
             const QRectF cell(area.left() + c * colW, area.top() + r * rowH,
                               colW - cellPad, rowH);
-            const QString text =
-                fm.elidedText(line(entries.at(idx), showPhantom), Qt::ElideRight,
-                              cell.width());
+            const QString text = painter->fontMetrics().elidedText(
+                line(entries.at(idx), showPhantom), Qt::ElideRight, int(cell.width()));
             painter->drawText(cell, Qt::AlignLeft | Qt::AlignVCenter, text);
         }
     }
