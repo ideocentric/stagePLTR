@@ -21,19 +21,33 @@
 #include "devicetype.h"
 #include "stagescene.h"  // for kDeviceMimeType
 
+#include <QFont>
+#include <QFontMetrics>
 #include <QIcon>
 #include <QMimeData>
 
 namespace {
 constexpr int kIdRole = Qt::UserRole + 1;
+constexpr int kIconSize = 44;
+constexpr int kLabelLines = 2;  // names wrap to at most two lines
 }
 
 DeviceList::DeviceList(QWidget *parent)
     : QListWidget(parent)
 {
+    // Use a slightly smaller label font, and size each grid cell from the actual
+    // font metrics (icon + two text lines + padding) so wrapped names are never
+    // clipped at the bottom, whatever the platform's default font height is.
+    QFont labelFont = font();
+    labelFont.setPixelSize(11);
+    setFont(labelFont);
+    const int lineH = QFontMetrics(labelFont).height();
+    const int cellW = 92;
+    const int cellH = kIconSize + 4 + kLabelLines * lineH + 8;
+
     setViewMode(QListView::IconMode);
-    setIconSize(QSize(48, 48));
-    setGridSize(QSize(84, 78));
+    setIconSize(QSize(kIconSize, kIconSize));
+    setGridSize(QSize(cellW, cellH));
     setResizeMode(QListView::Adjust);
     setMovement(QListView::Static);
     setSpacing(4);

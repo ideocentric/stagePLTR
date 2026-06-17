@@ -21,9 +21,18 @@
 #include "devicecatalog.h"
 #include "devicelist.h"
 
+#include <QFont>
+
 DevicePalette::DevicePalette(QWidget *parent)
     : QToolBox(parent)
 {
+    // A styled QToolBox::tab sizes its height from the plain font but renders the
+    // selected tab bold (taller), which clips descenders. Fix the font size and
+    // give the tab an explicit min-height so the label always fits.
+    QFont tabFont = font();
+    tabFont.setPixelSize(12);
+    setFont(tabFont);
+
     // Keep the whole palette light regardless of OS theme so the dark device
     // icons stay legible, and so the section headers match the icon grids.
     setStyleSheet(QStringLiteral(
@@ -33,7 +42,8 @@ DevicePalette::DevicePalette(QWidget *parent)
         "  color: #202020;"
         "  border: 1px solid #c2c4c7;"
         "  border-radius: 3px;"
-        "  padding: 6px 8px;"
+        "  padding: 4px 8px;"
+        "  min-height: 22px;"
         "}"
         "QToolBox::tab:selected { background-color: #cfe0f5; color: #101010;"
         "  font-weight: bold; }"
