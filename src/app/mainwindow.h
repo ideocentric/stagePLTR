@@ -22,6 +22,7 @@
 #include "devicecatalog.h"
 #include "documentinfo.h"
 
+#include <QByteArray>
 #include <QMainWindow>
 #include <QString>
 
@@ -31,6 +32,7 @@ class DevicePalette;
 class PortEditor;
 class ChannelTableModel;
 class QCloseEvent;
+class QShowEvent;
 class QTableView;
 
 class MainWindow : public QMainWindow
@@ -43,8 +45,10 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private slots:
+    void resetWindowLayout();
     void newPlot();
     void openPlot();
     bool savePlot();
@@ -66,6 +70,12 @@ private:
     void createBreakoutDock();
     void updateSelection();
 
+    // Window placement (persisted via QSettings; scaling-aware centering).
+    void restoreWindowGeometry();
+    void saveWindowGeometry();
+    void centerOnScreen();
+    QSize defaultWindowSize() const;
+
     bool maybeSave();                       // prompt if dirty; returns false to cancel
     bool saveToFile(const QString &path);
     bool loadFromFile(const QString &path);
@@ -83,6 +93,9 @@ private:
     DocumentInfo m_docInfo;
     QString m_currentFile;
     bool m_dirty = false;
+
+    QByteArray m_defaultLayout;     // dock arrangement captured at startup
+    bool m_pendingCenter = false;   // centre on the first show (first run only)
 };
 
 #endif // MAINWINDOW_H

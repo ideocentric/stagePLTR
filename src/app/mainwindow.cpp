@@ -32,11 +32,13 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCursor>
 #include <QDate>
 #include <QDockWidget>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -46,6 +48,9 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QSaveFile>
+#include <QScreen>
+#include <QSettings>
+#include <QShowEvent>
 #include <QSignalBlocker>
 #include <QStatusBar>
 #include <QTableView>
@@ -89,7 +94,13 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::editDocumentInfo);
 
     statusBar()->showMessage(tr("Ready"));
-    resize(1280, 900);
+
+    // Remember the default dock arrangement (for "Reset Window Layout"), then
+    // restore the saved window geometry/state or fall back to a centred default.
+    setObjectName(QStringLiteral("MainWindow"));
+    m_defaultLayout = saveState();
+    restoreWindowGeometry();
+
     setCurrentFile(QString());
 }
 
@@ -191,6 +202,10 @@ void MainWindow::createActions()
     connect(resetZoomAct, &QAction::triggered, this, [this] { m_view->resetZoom(); });
     addAction(resetZoomAct);
 
+    auto *resetLayoutAct = new QAction(tr("Reset &Window Layout"), this);
+    connect(resetLayoutAct, &QAction::triggered, this, &MainWindow::resetWindowLayout);
+    addAction(resetLayoutAct);
+
     auto *aboutAct = new QAction(tr("&About stagePLTR"), this);
     aboutAct->setMenuRole(QAction::AboutRole);  // moves to app menu on macOS
     connect(aboutAct, &QAction::triggered, this, &MainWindow::about);
@@ -237,6 +252,8 @@ void MainWindow::createMenus()
     viewMenu->addAction(byText(tr("Zoom &In")));
     viewMenu->addAction(byText(tr("Zoom &Out")));
     viewMenu->addAction(byText(tr("&Actual Size")));
+    viewMenu->addSeparator();
+    viewMenu->addAction(byText(tr("Reset &Window Layout")));
 
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(byText(tr("&About stagePLTR")));
@@ -245,6 +262,7 @@ void MainWindow::createMenus()
 void MainWindow::createPalette()
 {
     auto *dock = new QDockWidget(tr("Devices"), this);
+    dock->setObjectName(QStringLiteral("DevicesDock"));  // for saveState/restoreState
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
     m_palette = new DevicePalette(dock);
@@ -259,6 +277,7 @@ void MainWindow::createPalette()
 void MainWindow::createPropertiesDock()
 {
     auto *dock = new QDockWidget(tr("Properties"), this);
+    dock->setObjectName(QStringLiteral("PropertiesDock"));
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
     m_portEditor = new PortEditor(dock);
@@ -274,6 +293,7 @@ void MainWindow::createPropertiesDock()
 void MainWindow::createBreakoutDock()
 {
     auto *dock = new QDockWidget(tr("Breakout / Input List"), this);
+    dock->setObjectName(QStringLiteral("BreakoutDock"));
     dock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
 
     m_channelModel = new ChannelTableModel(this);
@@ -527,8 +547,88 @@ void MainWindow::markDirty()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    if (maybeSave())
+    if (maybeSave()) {
+        saveWindowGeometry();
         event->accept();
-    else
+    } else {
         event->ignore();
+    }
+}
+
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    // Centre on first show only — by now the window has its real frame, so the
+    // centring accounts for the title bar.
+    if (m_pendingCenter) {
+        m_pendingCenter = false;
+        centerOnScreen();
+    }
+}
+
+QSize MainWindow::defaultWindowSize() const
+{
+    QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+
+    QSize size(1280, 900);
+    if (screen) {
+        // Never exceed the usable area — important on small or scaled displays.
+        const QSize avail = screen->availableGeometry().size();
+        size.setWidth(qMin(size.width(), int(avail.width() * 0.9)));
+        size.setHeight(qMin(size.height(), int(avail.height() * 0.9)));
+    }
+    return size;
+}
+
+void MainWindow::centerOnScreen()
+{
+    // Centre the window on the screen under the cursor. availableGeometry() and
+    // frameGeometry() are both in logical points, so this is correct regardless
+    // of the display's scale factor (no UHD-vs-scaled offset).
+    QScreen *screen = QGuiApplication::screenAt(QCursor::pos());
+    if (!screen)
+        screen = this->screen();
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return;
+
+    const QRect avail = screen->availableGeometry();
+    QRect frame = frameGeometry();
+    frame.moveCenter(avail.center());
+    move(frame.topLeft());
+}
+
+void MainWindow::restoreWindowGeometry()
+{
+    QSettings settings;
+    const QByteArray geometry =
+        settings.value(QStringLiteral("window/geometry")).toByteArray();
+    if (!geometry.isEmpty() && restoreGeometry(geometry)) {
+        restoreState(settings.value(QStringLiteral("window/state")).toByteArray());
+    } else {
+        // First run: a clamped default size, centred on the first show.
+        resize(defaultWindowSize());
+        m_pendingCenter = true;
+    }
+}
+
+void MainWindow::saveWindowGeometry()
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
+    settings.setValue(QStringLiteral("window/state"), saveState());
+}
+
+void MainWindow::resetWindowLayout()
+{
+    QSettings settings;
+    settings.remove(QStringLiteral("window/geometry"));
+    settings.remove(QStringLiteral("window/state"));
+
+    restoreState(m_defaultLayout);  // the arrangement captured at startup
+    resize(defaultWindowSize());
+    centerOnScreen();
 }
