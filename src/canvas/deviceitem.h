@@ -24,6 +24,7 @@
 
 #include <QGraphicsObject>
 #include <QList>
+#include <QPainterPath>
 #include <QSizeF>
 #include <QString>
 
@@ -54,7 +55,13 @@ public:
     // assigned by the scene during renumbering. Empty = no badge.
     void setChannelBadge(const QString &badge);
 
+    // The icon's own rectangle (centred on the origin), used for hit-testing and
+    // for keeping the device within the stage area — independent of the larger
+    // bounding rect that must also reserve room for the upright label/badge.
+    QRectF iconRect() const;
+
     QRectF boundingRect() const override;
+    QPainterPath shape() const override;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                QWidget *widget) override;
 

@@ -394,9 +394,9 @@ void StageScene::enforceContentBounds()
     for (QGraphicsItem *gi : all) {
         if (gi->type() != DeviceItem::Type)
             continue;
-        const QRectF br = gi->boundingRect();
-        const qreal minY = top - br.top();
-        const qreal maxY = bottom - br.bottom();
+        const QRectF icon = static_cast<DeviceItem *>(gi)->iconRect();
+        const qreal minY = top - icon.top();
+        const qreal maxY = bottom - icon.bottom();
         // itemChange re-clamps too; this nudges existing devices into range.
         const qreal y = qBound(minY, gi->pos().y(), qMax(minY, maxY));
         if (gi->pos().y() != y)

@@ -26,12 +26,24 @@
 #include <QStyleOptionGraphicsItem>
 #include <QSvgRenderer>
 #include <QVariant>
+#include <QtMath>
+
+#include <cmath>
 
 namespace {
 constexpr qreal kLabelGap = 3.0;
 constexpr qreal kLabelHeight = 26.0;     // room for up to two wrapped lines
 constexpr qreal kLabelMinWidth = 100.0;  // labels may be wider than the icon
-constexpr qreal kBadgeMargin = 4.0;
+constexpr qreal kBadgeReserve = 18.0;    // padding for the upright badge swing
+
+// Axis-aligned half-extents of a w×h box rotated by `degrees` (about its centre).
+QSizeF rotatedHalfExtents(qreal w, qreal h, qreal degrees)
+{
+    const qreal rad = qDegreesToRadians(degrees);
+    const qreal c = std::abs(std::cos(rad));
+    const qreal s = std::abs(std::sin(rad));
+    return QSizeF((w / 2.0) * c + (h / 2.0) * s, (w / 2.0) * s + (h / 2.0) * c);
+}
 }
 
 DeviceItem::DeviceItem(const DeviceType &type, QGraphicsItem *parent)
@@ -67,13 +79,15 @@ void DeviceItem::setPorts(const QList<Port> &ports)
 QVariant DeviceItem::itemChange(GraphicsItemChange change, const QVariant &value)
 {
     // Keep the item within the stage area: below the letterhead (top) and above
-    // the on-page input-list legend (bottom).
+    // the on-page input-list legend (bottom). Clamp by the icon rect, not the
+    // (much larger) bounding rect, so the reserved label/badge room doesn't
+    // over-constrain placement.
     if (change == ItemPositionChange) {
         if (auto *stage = qobject_cast<StageScene *>(scene())) {
             QPointF pos = value.toPointF();
-            const QRectF br = boundingRect();
-            const qreal minY = stage->contentTop() - br.top();
-            const qreal maxY = stage->contentBottom() - br.bottom();
+            const QRectF icon = iconRect();
+            const qreal minY = stage->contentTop() - icon.top();
+            const qreal maxY = stage->contentBottom() - icon.bottom();
             pos.setY(qBound(minY, pos.y(), qMax(minY, maxY)));
             return pos;
         }
@@ -89,16 +103,37 @@ void DeviceItem::setChannelBadge(const QString &badge)
     update();
 }
 
-QRectF DeviceItem::boundingRect() const
+QRectF DeviceItem::iconRect() const
 {
     const qreal w = m_iconSize.width();
     const qreal h = m_iconSize.height();
-    // Icon centred on origin; label sits below it in an area that may be wider
-    // than the icon (so names aren't clipped). Extra top margin leaves room for
-    // the channel badge that overhangs the icon corner.
+    return QRectF(-w / 2.0, -h / 2.0, w, h);
+}
+
+QRectF DeviceItem::boundingRect() const
+{
+    // The icon rotates with the item, but the label and badge are drawn upright
+    // (counter-rotated) and re-anchored to the icon's rotated footprint. So the
+    // bounding rect must contain those annotations for *any* rotation: use a
+    // rotation-invariant square large enough to hold the icon's diagonal plus
+    // the label below and the badge at the corner.
+    const qreal w = m_iconSize.width();
+    const qreal h = m_iconSize.height();
     const qreal labelW = qMax(w, kLabelMinWidth);
-    return QRectF(-labelW / 2.0, -h / 2.0 - kBadgeMargin,
-                  labelW, h + kBadgeMargin + kLabelGap + kLabelHeight);
+    const qreal diagHalf = 0.5 * std::hypot(w, h);
+    const qreal labelReach = diagHalf + kLabelGap + kLabelHeight;
+    const qreal reach =
+        std::hypot(labelW / 2.0, labelReach) + kBadgeReserve;
+    return QRectF(-reach, -reach, 2.0 * reach, 2.0 * reach);
+}
+
+QPainterPath DeviceItem::shape() const
+{
+    // Hit-test (and tight selection) against the icon only, not the large
+    // bounding rect — so clicks land on the symbol, not its reserved halo.
+    QPainterPath path;
+    path.addRect(iconRect());
+    return path;
 }
 
 void DeviceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
@@ -108,34 +143,54 @@ void DeviceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
 
     const qreal w = m_iconSize.width();
     const qreal h = m_iconSize.height();
-    const QRectF iconRect(-w / 2.0, -h / 2.0, w, h);
 
+    // The icon rotates with the item.
     if (m_renderer && m_renderer->isValid())
-        m_renderer->render(painter, iconRect);
+        m_renderer->render(painter, iconRect());
 
-    // Label — centred below the icon in a fixed-width area, wrapping to two lines.
+    // Selection highlight: a tight dashed box around the (rotated) icon.
+    if (option->state & QStyle::State_Selected) {
+        QPen pen(QColor(0x1e, 0x73, 0xd6));
+        pen.setStyle(Qt::DashLine);
+        pen.setWidthF(1.0);
+        pen.setCosmetic(true);
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRect(iconRect().adjusted(-1.0, -1.0, 1.0, 1.0));
+    }
+
+    // Label and badge stay upright regardless of the object's rotation. Counter-
+    // rotate into a scene-aligned frame and re-anchor to the icon's rotated
+    // footprint (axis-aligned half-extents), so the label sits below the symbol
+    // and the badge at its top-right corner whatever the angle.
+    const QSizeF half = rotatedHalfExtents(w, h, rotation());
+
+    painter->save();
+    painter->rotate(-rotation());
+
     if (!m_label.isEmpty()) {
         QFont font = painter->font();
-        font.setPixelSize(11);  // pixel size = scene units, so it scales with the
-        painter->setFont(font); // view/PDF render transform (not the device DPI)
+        font.setPixelSize(11);  // scene units, so it scales with the view/PDF transform
+        painter->setFont(font);
         painter->setPen(QColor(0x22, 0x22, 0x22));
         const qreal labelW = qMax(w, kLabelMinWidth);
-        const QRectF labelRect(-labelW / 2.0, h / 2.0 + kLabelGap, labelW, kLabelHeight);
+        const QRectF labelRect(-labelW / 2.0, half.height() + kLabelGap, labelW,
+                               kLabelHeight);
         painter->drawText(labelRect, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
                           m_label);
     }
 
-    // Channel-number badge at the icon's top-right corner.
     if (!m_channelBadge.isEmpty()) {
         QFont badgeFont = painter->font();
-        badgeFont.setPixelSize(10);  // pixel size scales with the render transform
+        badgeFont.setPixelSize(10);
         badgeFont.setBold(true);
         painter->setFont(badgeFont);
 
         const qreal textW = QFontMetricsF(badgeFont).horizontalAdvance(m_channelBadge);
         const qreal r = 8.0;
         const qreal badgeW = qMax(2.0 * r, textW + 8.0);
-        const QRectF badge(w / 2.0 - badgeW + 2.0, -h / 2.0 - 2.0, badgeW, 2.0 * r);
+        const QRectF badge(half.width() - badgeW + 2.0, -half.height() - 2.0,
+                           badgeW, 2.0 * r);
 
         painter->setPen(Qt::NoPen);
         painter->setBrush(QColor(0x1e, 0x73, 0xd6));
@@ -144,14 +199,5 @@ void DeviceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
         painter->drawText(badge, Qt::AlignCenter, m_channelBadge);
     }
 
-    // Selection highlight.
-    if (option->state & QStyle::State_Selected) {
-        QPen pen(QColor(0x1e, 0x73, 0xd6));
-        pen.setStyle(Qt::DashLine);
-        pen.setWidthF(1.0);
-        pen.setCosmetic(true);
-        painter->setPen(pen);
-        painter->setBrush(Qt::NoBrush);
-        painter->drawRect(boundingRect().adjusted(0.5, 0.5, -0.5, -0.5));
-    }
+    painter->restore();
 }
