@@ -22,6 +22,8 @@
 
 #include <QFont>
 #include <QFontMetricsF>
+#include <QGraphicsSceneMouseEvent>
+#include <QLineF>
 #include <QPainter>
 #include <QStyleOptionGraphicsItem>
 #include <QSvgRenderer>
@@ -35,6 +37,9 @@ constexpr qreal kLabelGap = 3.0;
 constexpr qreal kLabelHeight = 26.0;     // room for up to two wrapped lines
 constexpr qreal kLabelMinWidth = 100.0;  // labels may be wider than the icon
 constexpr qreal kBadgeReserve = 18.0;    // padding for the upright badge swing
+constexpr qreal kHandleLen = 22.0;       // stem length above the icon footprint
+constexpr qreal kHandleRadius = 6.0;     // rotation-handle grab circle
+constexpr qreal kSnapDegrees = 15.0;     // Shift-snap increment
 
 // Axis-aligned half-extents of a w×h box rotated by `degrees` (about its centre).
 QSizeF rotatedHalfExtents(qreal w, qreal h, qreal degrees)
@@ -127,12 +132,26 @@ QRectF DeviceItem::boundingRect() const
     return QRectF(-reach, -reach, 2.0 * reach, 2.0 * reach);
 }
 
+QPointF DeviceItem::rotationHandleScenePos() const
+{
+    // Straight above the icon's footprint, in scene-up — so the handle is always
+    // reachable at the top no matter how the symbol is turned.
+    const QSizeF half =
+        rotatedHalfExtents(m_iconSize.width(), m_iconSize.height(), rotation());
+    return mapToScene(QPointF(0, 0)) + QPointF(0, -(half.height() + kHandleLen));
+}
+
 QPainterPath DeviceItem::shape() const
 {
     // Hit-test (and tight selection) against the icon only, not the large
-    // bounding rect — so clicks land on the symbol, not its reserved halo.
+    // bounding rect — so clicks land on the symbol, not its reserved halo. When
+    // selected, also include the rotation-handle grab circle.
     QPainterPath path;
     path.addRect(iconRect());
+    if (isSelected()) {
+        const QPointF handle = mapFromScene(rotationHandleScenePos());
+        path.addEllipse(handle, kHandleRadius + 4.0, kHandleRadius + 4.0);
+    }
     return path;
 }
 
@@ -199,5 +218,58 @@ void DeviceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
         painter->drawText(badge, Qt::AlignCenter, m_channelBadge);
     }
 
+    // Rotation handle: a stem + grab circle above the icon, shown when selected.
+    if (option->state & QStyle::State_Selected) {
+        const qreal stemTop = -(half.height() + kHandleLen);
+        QPen stem(QColor(0x1e, 0x73, 0xd6));
+        stem.setCosmetic(true);
+        painter->setPen(stem);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawLine(QPointF(0, -half.height()),
+                          QPointF(0, stemTop + kHandleRadius));
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(0x1e, 0x73, 0xd6));
+        painter->drawEllipse(QPointF(0, stemTop), kHandleRadius, kHandleRadius);
+    }
+
     painter->restore();
+}
+
+void DeviceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (isSelected() && event->button() == Qt::LeftButton
+        && QLineF(event->scenePos(), rotationHandleScenePos()).length()
+               <= kHandleRadius + 5.0) {
+        m_rotating = true;
+        setCursor(Qt::ClosedHandCursor);
+        event->accept();
+        return;
+    }
+    QGraphicsObject::mousePressEvent(event);
+}
+
+void DeviceItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (m_rotating) {
+        const QPointF v = event->scenePos() - mapToScene(QPointF(0, 0));
+        // Handle points up at 0°, so the angle to the cursor maps to rotation+90.
+        qreal deg = qRadiansToDegrees(std::atan2(v.y(), v.x())) + 90.0;
+        if (event->modifiers() & Qt::ShiftModifier)
+            deg = qRound(deg / kSnapDegrees) * kSnapDegrees;
+        setRotation(deg);
+        event->accept();
+        return;
+    }
+    QGraphicsObject::mouseMoveEvent(event);
+}
+
+void DeviceItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (m_rotating) {
+        m_rotating = false;
+        setCursor(Qt::OpenHandCursor);
+        event->accept();
+        return;
+    }
+    QGraphicsObject::mouseReleaseEvent(event);
 }

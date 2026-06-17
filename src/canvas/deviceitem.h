@@ -67,14 +67,22 @@ public:
 
 protected:
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
 
 private:
+    // Scene position of the rotation handle (above the icon's footprint), and a
+    // hit-test against it. Only meaningful while the item is selected.
+    QPointF rotationHandleScenePos() const;
+
     QString m_typeId;
     QString m_label;
     QSizeF m_iconSize;
     QList<Port> m_ports;
     QString m_channelBadge;
     QSvgRenderer *m_renderer = nullptr;  // owned (child QObject)
+    bool m_rotating = false;             // dragging the rotation handle
 };
 
 #endif // DEVICEITEM_H
