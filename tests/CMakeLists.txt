@@ -19,7 +19,8 @@ add_unit_test(test_pageconfig)
 add_unit_test(test_devicecatalog)
 add_unit_test(test_inputlist)
 
-# The scene test needs a QApplication; run it headless via the offscreen plugin.
+# These need a QApplication; run them headless via the offscreen plugin.
 add_unit_test(test_stagescene)
-set_tests_properties(test_stagescene PROPERTIES
+add_unit_test(test_undo)
+set_tests_properties(test_stagescene test_undo PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

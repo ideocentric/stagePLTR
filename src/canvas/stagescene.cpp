@@ -109,7 +109,7 @@ void StageScene::setInputListVisible(bool visible)
     update();
 }
 
-DeviceItem *StageScene::addDevice(const QString &typeId, const QPointF &scenePos)
+DeviceItem *StageScene::makeDevice(const QString &typeId)
 {
     if (!m_catalog)
         return nullptr;
@@ -118,16 +118,39 @@ DeviceItem *StageScene::addDevice(const QString &typeId, const QPointF &scenePos
         return nullptr;
 
     auto *item = new DeviceItem(*type);
-    addItem(item);
-    item->setPos(scenePos);  // after addItem so itemChange clamping can apply
-
-    // Any later geometry change on the item is a content change.
+    // Any later geometry change on the item is a content change. Wired once at
+    // creation; the connections persist across remove/re-insert (undo/redo).
     connect(item, &QGraphicsObject::xChanged, this, &StageScene::plotChanged);
     connect(item, &QGraphicsObject::yChanged, this, &StageScene::plotChanged);
     connect(item, &QGraphicsObject::rotationChanged, this, &StageScene::plotChanged);
+    return item;
+}
 
+void StageScene::insertDevice(DeviceItem *item)
+{
+    if (!item)
+        return;
+    addItem(item);
+    emit plotChanged();
+    renumberChannels();  // also re-clamps the item into the stage area
+}
+
+void StageScene::removeDeviceItem(DeviceItem *item)
+{
+    if (!item)
+        return;
+    removeItem(item);  // no delete — ownership returns to the caller (a command)
     emit plotChanged();
     renumberChannels();
+}
+
+DeviceItem *StageScene::addDevice(const QString &typeId, const QPointF &scenePos)
+{
+    DeviceItem *item = makeDevice(typeId);
+    if (!item)
+        return nullptr;
+    item->setPos(scenePos);
+    insertDevice(item);
     return item;
 }
 
@@ -137,22 +160,6 @@ void StageScene::clearDevices()
     bool removedAny = false;
     for (QGraphicsItem *item : existing) {
         if (item->type() == DeviceItem::Type) {
-            removeItem(item);
-            delete item;
-            removedAny = true;
-        }
-    }
-    if (removedAny) {
-        emit plotChanged();
-        renumberChannels();
-    }
-}
-
-void StageScene::removeDevices(const QList<QGraphicsItem *> &toRemove)
-{
-    bool removedAny = false;
-    for (QGraphicsItem *item : toRemove) {
-        if (item && item->type() == DeviceItem::Type) {
             removeItem(item);
             delete item;
             removedAny = true;
@@ -337,8 +344,46 @@ void StageScene::dropEvent(QGraphicsSceneDragDropEvent *event)
     }
     const QString typeId =
         QString::fromUtf8(mime->data(QString::fromLatin1(kDeviceMimeType)));
-    if (addDevice(typeId, event->scenePos()))
-        event->acceptProposedAction();
+    // Let the window turn this into an undoable add rather than mutating here.
+    emit dropRequested(typeId, event->scenePos());
+    event->acceptProposedAction();
+}
+
+void StageScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    QGraphicsScene::mousePressEvent(event);  // settles selection / starts the drag
+
+    // Snapshot the selected devices so a completed drag becomes one undo step.
+    m_dragStart.clear();
+    if (event->button() == Qt::LeftButton) {
+        const QList<QGraphicsItem *> selected = selectedItems();
+        for (QGraphicsItem *gi : selected) {
+            if (gi->type() != DeviceItem::Type)
+                continue;
+            auto *device = static_cast<DeviceItem *>(gi);
+            m_dragStart.insert(device, {device->pos(), device->rotation()});
+        }
+    }
+}
+
+void StageScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    QGraphicsScene::mouseReleaseEvent(event);
+
+    if (m_dragStart.isEmpty())
+        return;
+
+    QVector<DeviceTransform> changes;
+    for (auto it = m_dragStart.cbegin(); it != m_dragStart.cend(); ++it) {
+        DeviceItem *device = it.key();
+        const QPointF oldPos = it.value().first;
+        const qreal oldRot = it.value().second;
+        if (device->pos() != oldPos || device->rotation() != oldRot)
+            changes.append({device, oldPos, oldRot, device->pos(), device->rotation()});
+    }
+    m_dragStart.clear();
+    if (!changes.isEmpty())
+        emit devicesTransformed(changes);
 }
 
 void StageScene::drawBackground(QPainter *painter, const QRectF &rect)

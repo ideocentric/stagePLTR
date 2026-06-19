@@ -55,6 +55,15 @@ struct Port
 
     QJsonObject toJson() const;
     static Port fromJson(const QJsonObject &obj);
+
+    bool operator==(const Port &o) const
+    {
+        return label == o.label && direction == o.direction && connector == o.connector
+               && level == o.level && signal == o.signal && balanced == o.balanced
+               && phantom == o.phantom && providedBy == o.providedBy
+               && toConsole == o.toConsole && notes == o.notes;
+    }
+    bool operator!=(const Port &o) const { return !(*this == o); }
 };
 
 // Enum <-> JSON-key and display-string helpers. Display lists are ordered to

@@ -25,9 +25,13 @@
 #include "pageconfig.h"
 
 #include <QGraphicsScene>
+#include <QHash>
 #include <QList>
+#include <QPair>
+#include <QPointF>
 #include <QRectF>
 #include <QString>
+#include <QVector>
 
 class DeviceCatalog;
 class DeviceItem;
@@ -38,6 +42,18 @@ class QJsonObject;
 //
 // MIME type for palette drops (carries a DeviceType id as UTF-8):
 extern const char *const kDeviceMimeType;
+
+// A device's position/rotation before and after a user drag (or a rotate
+// command). Emitted via devicesTransformed() so the window can record one undo
+// step per completed gesture.
+struct DeviceTransform
+{
+    DeviceItem *item = nullptr;
+    QPointF oldPos;
+    qreal oldRotation = 0.0;
+    QPointF newPos;
+    qreal newRotation = 0.0;
+};
 
 class StageScene : public QGraphicsScene
 {
@@ -50,6 +66,13 @@ public:
     // Returns the new item, or nullptr if the id is unknown.
     DeviceItem *addDevice(const QString &typeId, const QPointF &scenePos);
 
+    // Lower-level primitives used by undo commands: create a device without
+    // inserting it (caller owns it until inserted), and move an existing item
+    // in/out of the scene without deleting it (so a command can keep it alive).
+    DeviceItem *makeDevice(const QString &typeId);
+    void insertDevice(DeviceItem *item);
+    void removeDeviceItem(DeviceItem *item);
+
     QRectF pageRect() const { return m_pageRect; }
 
     // Page size/orientation for this plot. Setting it resizes the page (and the
@@ -58,7 +81,6 @@ public:
     const PageConfig &pageConfig() const { return m_pageConfig; }
 
     void clearDevices();
-    void removeDevices(const QList<QGraphicsItem *> &items);
     QJsonObject toJson() const;
     bool fromJson(const QJsonObject &obj, QString *error = nullptr);
 
@@ -92,11 +114,17 @@ signals:
     void channelsChanged();
     // Emitted when the user double-clicks the page header (to edit band/logo).
     void editDocumentInfoRequested();
+    // A palette item was dropped; the window records it as an undoable add.
+    void dropRequested(const QString &typeId, const QPointF &scenePos);
+    // One or more devices finished a move/rotate drag (for one undo step).
+    void devicesTransformed(const QVector<DeviceTransform> &changes);
 
 protected:
     void dragEnterEvent(QGraphicsSceneDragDropEvent *event) override;
     void dragMoveEvent(QGraphicsSceneDragDropEvent *event) override;
     void dropEvent(QGraphicsSceneDragDropEvent *event) override;
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
     void drawBackground(QPainter *painter, const QRectF &rect) override;
     void drawForeground(QPainter *painter, const QRectF &rect) override;
@@ -117,6 +145,10 @@ private:
     QList<InputListEntry> m_listEntries;
     DocumentInfo m_documentInfo;
     bool m_inputListVisible = true;
+
+    // Transforms of the selected devices captured at mouse-press, to diff on
+    // release into a single move/rotate undo step.
+    QHash<DeviceItem *, QPair<QPointF, qreal>> m_dragStart;
 };
 
 #endif // STAGESCENE_H

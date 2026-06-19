@@ -25,6 +25,8 @@ set(CORE_SOURCES
     # app shell — window, menus, wiring
     src/app/mainwindow.cpp
     src/app/mainwindow.h
+    src/app/undocommands.cpp
+    src/app/undocommands.h
 
     # canvas — the interactive stage scene/view/items
     src/canvas/stagescene.cpp

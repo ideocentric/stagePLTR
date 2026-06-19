@@ -20,20 +20,24 @@
 #define MAINWINDOW_H
 
 #include "devicecatalog.h"
-#include "documentinfo.h"
+#include "ports.h"
+#include "stagescene.h"  // StageScene + DeviceTransform (for slot signatures)
 
 #include <QByteArray>
+#include <QList>
 #include <QMainWindow>
 #include <QString>
 
-class StageScene;
 class StageView;
 class DevicePalette;
 class PortEditor;
 class ChannelTableModel;
+class DeviceItem;
+class QAction;
 class QCloseEvent;
 class QShowEvent;
 class QTableView;
+class QUndoStack;
 
 class MainWindow : public QMainWindow
 {
@@ -48,6 +52,9 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 private slots:
+    void handleDrop(const QString &typeId, const QPointF &scenePos);
+    void handleTransforms(const QVector<DeviceTransform> &changes);
+    void handlePortEdit();
     void resetWindowLayout();
     void newPlot();
     void openPlot();
@@ -68,7 +75,6 @@ private:
     void createPalette();
     void createPropertiesDock();
     void createBreakoutDock();
-    void updateSelection();
 
     // Window placement (persisted via QSettings; scaling-aware centering).
     void restoreWindowGeometry();
@@ -76,11 +82,11 @@ private:
     void centerOnScreen();
     QSize defaultWindowSize() const;
 
-    bool maybeSave();                       // prompt if dirty; returns false to cancel
+    bool maybeSave();                       // prompt if modified; false to cancel
     bool saveToFile(const QString &path);
     bool loadFromFile(const QString &path);
     void setCurrentFile(const QString &path);
-    void markDirty();
+    void refreshProperties();               // re-bind the editor + edit baseline
 
     DeviceCatalog m_catalog;
     StageScene *m_scene = nullptr;
@@ -89,10 +95,17 @@ private:
     PortEditor *m_portEditor = nullptr;
     ChannelTableModel *m_channelModel = nullptr;
     QTableView *m_breakoutView = nullptr;
+    QUndoStack *m_undoStack = nullptr;
+    QAction *m_undoAction = nullptr;
+    QAction *m_redoAction = nullptr;
 
-    DocumentInfo m_docInfo;
     QString m_currentFile;
-    bool m_dirty = false;
+
+    // Baseline for turning Properties-panel edits into one undo step each.
+    DeviceItem *m_editDevice = nullptr;
+    QString m_editLabel;
+    QList<Port> m_editPorts;
+    bool m_suppressRefresh = false;  // don't re-bind the editor during its own edit
 
     QByteArray m_defaultLayout;     // dock arrangement captured at startup
     bool m_pendingCenter = false;   // centre on the first show (first run only)

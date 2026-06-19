@@ -28,6 +28,7 @@
 #include "preferencesdialog.h"
 #include "stagescene.h"
 #include "stageview.h"
+#include "undocommands.h"
 
 #include <QAction>
 #include <QApplication>
@@ -54,6 +55,7 @@
 #include <QSignalBlocker>
 #include <QStatusBar>
 #include <QTableView>
+#include <QUndoStack>
 
 namespace {
 const QString kFileFilter = QStringLiteral("stagePLTR Plot (*.splot)");
@@ -70,11 +72,15 @@ MainWindow::MainWindow(QWidget *parent)
                              tr("Could not load the device catalog:\n%1").arg(error));
     }
 
-    m_docInfo.date = QDate::currentDate();
-
     m_scene = new StageScene(&m_catalog, this);
     m_scene->setPageConfig(pageconfig::load(DocumentFeature::StagePlot));
-    m_scene->setDocumentInfo(m_docInfo);
+    {
+        DocumentInfo info;
+        info.date = QDate::currentDate();
+        m_scene->setDocumentInfo(info);
+    }
+    m_undoStack = new QUndoStack(this);
+
     m_view = new StageView(this);
     m_view->setScene(m_scene);
     setCentralWidget(m_view);
@@ -85,13 +91,22 @@ MainWindow::MainWindow(QWidget *parent)
     createPropertiesDock();
     createBreakoutDock();
 
-    connect(m_scene, &StageScene::plotChanged, this, &MainWindow::markDirty);
-    connect(m_scene, &StageScene::selectionChanged, this, &MainWindow::updateSelection);
+    connect(m_scene, &StageScene::selectionChanged, this, &MainWindow::refreshProperties);
     connect(m_scene, &StageScene::channelsChanged, this, [this] {
         m_channelModel->setChannels(m_scene->channels());
     });
     connect(m_scene, &StageScene::editDocumentInfoRequested,
             this, &MainWindow::editDocumentInfo);
+    connect(m_scene, &StageScene::dropRequested, this, &MainWindow::handleDrop);
+    connect(m_scene, &StageScene::devicesTransformed, this, &MainWindow::handleTransforms);
+
+    // The undo stack's clean state drives the document-modified indicator; its
+    // index changes re-sync the Properties panel after undo/redo.
+    connect(m_undoStack, &QUndoStack::cleanChanged, this, [this] { updateWindowTitle(); });
+    connect(m_undoStack, &QUndoStack::indexChanged, this, [this] {
+        if (!m_suppressRefresh)
+            refreshProperties();
+    });
 
     statusBar()->showMessage(tr("Ready"));
 
@@ -161,6 +176,14 @@ void MainWindow::createActions()
     quitAct->setMenuRole(QAction::QuitRole);  // moves to app menu on macOS
     connect(quitAct, &QAction::triggered, this, &QWidget::close);
     addAction(quitAct);
+
+    m_undoAction = m_undoStack->createUndoAction(this, tr("&Undo"));
+    m_undoAction->setShortcuts(QKeySequence::Undo);
+    addAction(m_undoAction);
+
+    m_redoAction = m_undoStack->createRedoAction(this, tr("&Redo"));
+    m_redoAction->setShortcuts(QKeySequence::Redo);
+    addAction(m_redoAction);
 
     auto *deleteAct = new QAction(tr("&Delete"), this);
     deleteAct->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
@@ -239,6 +262,9 @@ void MainWindow::createMenus()
     fileMenu->addAction(byText(tr("&Quit")));
 
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
+    editMenu->addAction(m_undoAction);
+    editMenu->addAction(m_redoAction);
+    editMenu->addSeparator();
     editMenu->addAction(byText(tr("&Delete")));
     editMenu->addAction(byText(tr("Select &All")));
     editMenu->addSeparator();
@@ -284,10 +310,7 @@ void MainWindow::createPropertiesDock()
     dock->setWidget(m_portEditor);
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
-    connect(m_portEditor, &PortEditor::edited, this, [this] {
-        m_scene->renumberChannels();
-        markDirty();
-    });
+    connect(m_portEditor, &PortEditor::edited, this, &MainWindow::handlePortEdit);
 }
 
 void MainWindow::createBreakoutDock()
@@ -307,7 +330,7 @@ void MainWindow::createBreakoutDock()
     addDockWidget(Qt::BottomDockWidgetArea, dock);
 }
 
-void MainWindow::updateSelection()
+void MainWindow::refreshProperties()
 {
     const QList<QGraphicsItem *> selected = m_scene->selectedItems();
     DeviceItem *device = nullptr;
@@ -318,8 +341,46 @@ void MainWindow::updateSelection()
             ++deviceCount;
         }
     }
-    // Show the editor only when exactly one device is selected.
-    m_portEditor->setDevice(deviceCount == 1 ? device : nullptr);
+    // Show the editor only when exactly one device is selected, and capture its
+    // current label/ports as the baseline for the next edit's undo step.
+    DeviceItem *bound = deviceCount == 1 ? device : nullptr;
+    m_portEditor->setDevice(bound);
+    m_editDevice = bound;
+    m_editLabel = bound ? bound->label() : QString();
+    m_editPorts = bound ? bound->ports() : QList<Port>();
+}
+
+void MainWindow::handleDrop(const QString &typeId, const QPointF &scenePos)
+{
+    m_undoStack->push(new AddDeviceCommand(m_scene, typeId, scenePos));
+}
+
+void MainWindow::handleTransforms(const QVector<DeviceTransform> &changes)
+{
+    bool moved = false;
+    for (const DeviceTransform &c : changes)
+        moved = moved || c.newPos != c.oldPos;
+    m_undoStack->push(new TransformDevicesCommand(
+        changes, moved ? tr("Move Device(s)") : tr("Rotate Device(s)")));
+}
+
+void MainWindow::handlePortEdit()
+{
+    if (!m_editDevice)
+        return;
+    const QString newLabel = m_editDevice->label();
+    const QList<Port> newPorts = m_editDevice->ports();
+    if (newLabel == m_editLabel && newPorts == m_editPorts)
+        return;  // editor signalled but nothing actually changed
+
+    // The editor already mutated the device; record the delta as one undo step
+    // without re-binding the editor (which would interrupt the user's edit).
+    m_suppressRefresh = true;
+    m_undoStack->push(new EditDeviceCommand(m_scene, m_editDevice, m_editLabel,
+                                            m_editPorts, newLabel, newPorts));
+    m_suppressRefresh = false;
+    m_editLabel = newLabel;
+    m_editPorts = newPorts;
 }
 
 void MainWindow::newPlot()
@@ -327,13 +388,14 @@ void MainWindow::newPlot()
     if (!maybeSave())
         return;
     m_scene->clearDevices();
+    m_undoStack->clear();
     m_scene->setPageConfig(pageconfig::load(DocumentFeature::StagePlot));
-    m_docInfo = DocumentInfo();
-    m_docInfo.date = QDate::currentDate();
-    m_scene->setDocumentInfo(m_docInfo);
+    DocumentInfo info;
+    info.date = QDate::currentDate();
+    m_scene->setDocumentInfo(info);
     setCurrentFile(QString());
-    m_dirty = false;
     updateWindowTitle();
+    refreshProperties();
 }
 
 void MainWindow::openPlot()
@@ -367,12 +429,13 @@ bool MainWindow::savePlotAs()
 
 void MainWindow::editDocumentInfo()
 {
-    DocumentInfoDialog dialog(m_docInfo, this);
+    const DocumentInfo oldInfo = m_scene->documentInfo();
+    DocumentInfoDialog dialog(oldInfo, this);
     if (dialog.exec() != QDialog::Accepted)
         return;
-    m_docInfo = dialog.info();
-    m_scene->setDocumentInfo(m_docInfo);
-    markDirty();
+    const DocumentInfo newInfo = dialog.info();
+    if (newInfo.toJson() != oldInfo.toJson())
+        m_undoStack->push(new EditDocumentInfoCommand(m_scene, oldInfo, newInfo));
 }
 
 void MainWindow::exportPdf()
@@ -401,22 +464,32 @@ void MainWindow::exportPdf()
 
 void MainWindow::deleteSelection()
 {
-    m_scene->removeDevices(m_scene->selectedItems());
+    QList<DeviceItem *> devices;
+    for (QGraphicsItem *item : m_scene->selectedItems())
+        if (item->type() == DeviceItem::Type)
+            devices.append(static_cast<DeviceItem *>(item));
+    if (!devices.isEmpty())
+        m_undoStack->push(new RemoveDevicesCommand(m_scene, devices));
 }
 
 void MainWindow::rotateSelection(double degrees)
 {
-    const QList<QGraphicsItem *> selected = m_scene->selectedItems();
-    for (QGraphicsItem *item : selected) {
-        if (item->type() == DeviceItem::Type)
-            item->setRotation(item->rotation() + degrees);
+    QVector<DeviceTransform> changes;
+    for (QGraphicsItem *item : m_scene->selectedItems()) {
+        if (item->type() != DeviceItem::Type)
+            continue;
+        auto *device = static_cast<DeviceItem *>(item);
+        changes.append({device, device->pos(), device->rotation(), device->pos(),
+                        device->rotation() + degrees});
     }
+    if (!changes.isEmpty())
+        m_undoStack->push(new TransformDevicesCommand(changes, tr("Rotate Device(s)")));
 }
 
 void MainWindow::addDeviceAtCentre(const QString &typeId)
 {
     const QPointF centre = m_view->mapToScene(m_view->viewport()->rect().center());
-    m_scene->addDevice(typeId, centre);
+    m_undoStack->push(new AddDeviceCommand(m_scene, typeId, centre));
 }
 
 void MainWindow::openPreferences()
@@ -427,10 +500,9 @@ void MainWindow::openPreferences()
     // Apply the (possibly new) default to the current plot. The page setup is
     // also stored in the .splot, so this becomes part of the document.
     const PageConfig chosen = pageconfig::load(DocumentFeature::StagePlot);
-    if (chosen != m_scene->pageConfig()) {
-        m_scene->setPageConfig(chosen);
-        markDirty();
-    }
+    if (chosen != m_scene->pageConfig())
+        m_undoStack->push(
+            new ChangePageConfigCommand(m_scene, m_scene->pageConfig(), chosen));
 }
 
 void MainWindow::about()
@@ -447,12 +519,12 @@ void MainWindow::updateWindowTitle()
     const QString name =
         m_currentFile.isEmpty() ? tr("Untitled") : QFileInfo(m_currentFile).fileName();
     setWindowTitle(tr("%1[*] — stagePLTR").arg(name));
-    setWindowModified(m_dirty);
+    setWindowModified(!m_undoStack->isClean());
 }
 
 bool MainWindow::maybeSave()
 {
-    if (!m_dirty)
+    if (m_undoStack->isClean())
         return true;
     const auto choice = QMessageBox::warning(
         this, tr("stagePLTR"),
@@ -477,7 +549,7 @@ bool MainWindow::saveToFile(const QString &path)
         return false;
     }
     QJsonObject root = m_scene->toJson();
-    root[QStringLiteral("info")] = m_docInfo.toJson();
+    root[QStringLiteral("info")] = m_scene->documentInfo().toJson();
     const QJsonDocument doc(root);
     file.write(doc.toJson(QJsonDocument::Indented));
     if (!file.commit()) {
@@ -486,7 +558,7 @@ bool MainWindow::saveToFile(const QString &path)
         return false;
     }
     setCurrentFile(path);
-    m_dirty = false;
+    m_undoStack->setClean();  // this state is now the saved one
     updateWindowTitle();
     statusBar()->showMessage(tr("Saved %1").arg(QFileInfo(path).fileName()), 3000);
     return true;
@@ -509,12 +581,12 @@ bool MainWindow::loadFromFile(const QString &path)
         return false;
     }
 
-    // Suppress dirty-marking while we populate the scene programmatically.
+    // Suppress live signals while we populate the scene programmatically.
     {
         const QSignalBlocker blocker(m_scene);
         const QJsonObject root = doc.object();
-        m_docInfo = DocumentInfo::fromJson(root.value(QStringLiteral("info")).toObject());
-        m_scene->setDocumentInfo(m_docInfo);
+        m_scene->setDocumentInfo(
+            DocumentInfo::fromJson(root.value(QStringLiteral("info")).toObject()));
         QString error;
         m_scene->fromJson(root, &error);
         if (!error.isEmpty())
@@ -522,10 +594,10 @@ bool MainWindow::loadFromFile(const QString &path)
     }
     // Channel signals were blocked during load; sync the breakout view now.
     m_channelModel->setChannels(m_scene->channels());
-    m_portEditor->setDevice(nullptr);
+    m_undoStack->clear();  // a freshly loaded document starts clean
+    refreshProperties();
 
     setCurrentFile(path);
-    m_dirty = false;
     updateWindowTitle();
     statusBar()->showMessage(tr("Opened %1").arg(QFileInfo(path).fileName()), 3000);
     return true;
@@ -535,14 +607,6 @@ void MainWindow::setCurrentFile(const QString &path)
 {
     m_currentFile = path;
     updateWindowTitle();
-}
-
-void MainWindow::markDirty()
-{
-    if (!m_dirty) {
-        m_dirty = true;
-        updateWindowTitle();
-    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
