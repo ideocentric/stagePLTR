@@ -19,6 +19,7 @@
 #ifndef DEVICETYPE_H
 #define DEVICETYPE_H
 
+#include "deviceicon.h"
 #include "ports.h"
 
 #include <QList>
@@ -33,9 +34,10 @@ struct DeviceType
     QString id;            // stable identifier, e.g. "amp-small-overhead"
     QString name;          // display name, e.g. "Small Amp"
     QString category;      // palette grouping, e.g. "Amplifiers"
-    QString iconResource;  // Qt resource path, e.g. ":/plot/amp-small-overhead.svg"
+    DeviceIcon icon;       // symbol (SVG preferred; raster supported)
     QSizeF  defaultSize{48.0, 48.0};
     QList<Port> ports;     // default port template
+    bool builtin = true;   // bundled (read-only) vs a user-created object
 };
 
 #endif // DEVICETYPE_H

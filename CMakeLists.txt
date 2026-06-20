@@ -38,6 +38,8 @@ set(CORE_SOURCES
 
     # model — data types + (de)serialization (and shared paint helpers)
     src/model/channel.h
+    src/model/deviceicon.cpp
+    src/model/deviceicon.h
     src/model/devicetype.h
     src/model/devicecatalog.cpp
     src/model/devicecatalog.h

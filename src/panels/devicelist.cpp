@@ -85,7 +85,7 @@ DeviceList::DeviceList(QWidget *parent)
 
 void DeviceList::addDevice(const DeviceType &type)
 {
-    auto *item = new QListWidgetItem(QIcon(type.iconResource), type.name, this);
+    auto *item = new QListWidgetItem(type.icon.toIcon(), type.name, this);
     item->setData(kIdRole, type.id);
     item->setToolTip(QStringLiteral("%1 — %2").arg(type.name, type.category));
     item->setTextAlignment(Qt::AlignHCenter | Qt::AlignTop);

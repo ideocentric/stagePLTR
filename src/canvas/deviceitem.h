@@ -25,6 +25,7 @@
 #include <QGraphicsObject>
 #include <QList>
 #include <QPainterPath>
+#include <QPixmap>
 #include <QSizeF>
 #include <QString>
 
@@ -96,7 +97,8 @@ private:
     QList<Port> m_ports;
     QString m_channelBadge;
     QPointF m_labelOffset;               // user displacement from the default spot
-    QSvgRenderer *m_renderer = nullptr;  // owned (child QObject)
+    QSvgRenderer *m_renderer = nullptr;  // owned (child QObject); SVG icons
+    QPixmap m_iconPixmap;                // raster icons (when not SVG)
     bool m_rotating = false;             // dragging the rotation handle
     bool m_movingLabel = false;          // dragging the label
     QPointF m_labelGrabScene;            // cursor->label-centre delta while dragging

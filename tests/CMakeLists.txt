@@ -20,7 +20,8 @@ add_unit_test(test_devicecatalog)
 add_unit_test(test_inputlist)
 
 # These need a QApplication; run them headless via the offscreen plugin.
+add_unit_test(test_deviceicon)
 add_unit_test(test_stagescene)
 add_unit_test(test_undo)
-set_tests_properties(test_stagescene test_undo PROPERTIES
+set_tests_properties(test_deviceicon test_stagescene test_undo PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

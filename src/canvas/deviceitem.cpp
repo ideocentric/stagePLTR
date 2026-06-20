@@ -59,7 +59,11 @@ DeviceItem::DeviceItem(const DeviceType &type, QGraphicsItem *parent)
     , m_iconSize(type.defaultSize)
     , m_ports(type.ports)
 {
-    m_renderer = new QSvgRenderer(type.iconResource, this);
+    // Render an SVG via a cached renderer; otherwise decode the raster once.
+    if (type.icon.isSvg())
+        m_renderer = new QSvgRenderer(type.icon.data(), this);
+    else if (type.icon.isValid())
+        m_iconPixmap.loadFromData(type.icon.data());
 
     setFlags(ItemIsMovable | ItemIsSelectable | ItemSendsGeometryChanges);
     setTransformOriginPoint(0.0, 0.0);  // origin is the icon centre; rotation pivots here
@@ -207,6 +211,8 @@ void DeviceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
     // The icon rotates with the item.
     if (m_renderer && m_renderer->isValid())
         m_renderer->render(painter, iconRect());
+    else if (!m_iconPixmap.isNull())
+        painter->drawPixmap(iconRect(), m_iconPixmap, m_iconPixmap.rect());
 
     // Selection highlight: a tight dashed box around the (rotated) icon.
     if (option->state & QStyle::State_Selected) {

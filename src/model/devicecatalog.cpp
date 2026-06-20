@@ -66,7 +66,7 @@ bool DeviceCatalog::loadFromJson(const QByteArray &data,
         type.id = id;
         type.name = obj.value(QStringLiteral("name")).toString(id);
         type.category = obj.value(QStringLiteral("category")).toString(QStringLiteral("Other"));
-        type.iconResource = iconResourceBase + QLatin1Char('/') + icon;
+        type.icon = DeviceIcon::fromPath(iconResourceBase + QLatin1Char('/') + icon);
 
         const QJsonArray size = obj.value(QStringLiteral("defaultSize")).toArray();
         if (size.size() == 2)
