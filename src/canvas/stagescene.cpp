@@ -187,6 +187,10 @@ QJsonObject StageScene::toJson() const
         obj[QStringLiteral("y")] = device->pos().y();
         obj[QStringLiteral("rotation")] = device->rotation();
         obj[QStringLiteral("label")] = device->label();
+        if (!device->labelOffset().isNull()) {
+            obj[QStringLiteral("labelOffset")] =
+                QJsonArray{device->labelOffset().x(), device->labelOffset().y()};
+        }
 
         QJsonArray portArray;
         for (const Port &port : device->ports())
@@ -229,6 +233,9 @@ bool StageScene::fromJson(const QJsonObject &obj, QString *error)
         const QString label = d.value(QStringLiteral("label")).toString();
         if (!label.isEmpty())
             item->setLabel(label);
+        const QJsonArray offset = d.value(QStringLiteral("labelOffset")).toArray();
+        if (offset.size() == 2)
+            item->setLabelOffset(QPointF(offset.at(0).toDouble(), offset.at(1).toDouble()));
 
         // Restore saved ports if present; otherwise keep the catalog defaults.
         if (d.contains(QStringLiteral("ports"))) {
@@ -361,7 +368,12 @@ void StageScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
             if (gi->type() != DeviceItem::Type)
                 continue;
             auto *device = static_cast<DeviceItem *>(gi);
-            m_dragStart.insert(device, {device->pos(), device->rotation()});
+            DeviceTransform t;
+            t.item = device;
+            t.oldPos = device->pos();
+            t.oldRotation = device->rotation();
+            t.oldLabelOffset = device->labelOffset();
+            m_dragStart.insert(device, t);
         }
     }
 }
@@ -376,10 +388,13 @@ void StageScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     QVector<DeviceTransform> changes;
     for (auto it = m_dragStart.cbegin(); it != m_dragStart.cend(); ++it) {
         DeviceItem *device = it.key();
-        const QPointF oldPos = it.value().first;
-        const qreal oldRot = it.value().second;
-        if (device->pos() != oldPos || device->rotation() != oldRot)
-            changes.append({device, oldPos, oldRot, device->pos(), device->rotation()});
+        DeviceTransform t = it.value();
+        t.newPos = device->pos();
+        t.newRotation = device->rotation();
+        t.newLabelOffset = device->labelOffset();
+        if (t.newPos != t.oldPos || t.newRotation != t.oldRotation
+            || t.newLabelOffset != t.oldLabelOffset)
+            changes.append(t);
     }
     m_dragStart.clear();
     if (!changes.isEmpty())
@@ -541,13 +556,33 @@ void StageScene::drawFooter(QPainter &painter) const
 
 void StageScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
 {
-    // Double-clicking the header band (and not a device) edits the band/logo.
-    if (event->button() == Qt::LeftButton
-        && !itemAt(event->scenePos(), QTransform())
-        && headerRect().contains(event->scenePos())) {
-        emit editDocumentInfoRequested();
-        event->accept();
-        return;
+    if (event->button() == Qt::LeftButton) {
+        // Double-clicking a moved label snaps it back to its default position
+        // (routed through the undo system as a one-step transform).
+        const QList<QGraphicsItem *> all = items();
+        for (QGraphicsItem *gi : all) {
+            if (gi->type() != DeviceItem::Type)
+                continue;
+            auto *device = static_cast<DeviceItem *>(gi);
+            if (device->labelOffset().isNull() || !device->labelContains(event->scenePos()))
+                continue;
+            DeviceTransform t;
+            t.item = device;
+            t.oldPos = t.newPos = device->pos();
+            t.oldRotation = t.newRotation = device->rotation();
+            t.oldLabelOffset = device->labelOffset();  // newLabelOffset stays default (0,0)
+            emit devicesTransformed({t});
+            event->accept();
+            return;
+        }
+
+        // Double-clicking the header band (and not a device) edits the band/logo.
+        if (!itemAt(event->scenePos(), QTransform())
+            && headerRect().contains(event->scenePos())) {
+            emit editDocumentInfoRequested();
+            event->accept();
+            return;
+        }
     }
     QGraphicsScene::mouseDoubleClickEvent(event);
 }

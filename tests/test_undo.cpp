@@ -62,6 +62,7 @@ private slots:
     void removeUndoRedo();
     void transformUndoRedo();
     void editDeviceUndoRedo();
+    void labelOffsetUndoRedo();
     void documentInfoUndoRedo();
     void pageConfigUndoRedo();
     void cleanState();
@@ -109,7 +110,12 @@ void TestUndo::transformUndoRedo()
     const QPointF oldPos = item->pos();
 
     const QPointF newPos = oldPos + QPointF(50, 0);
-    QVector<DeviceTransform> changes{{item, oldPos, 0.0, newPos, 90.0}};
+    DeviceTransform t;
+    t.item = item;
+    t.oldPos = oldPos;
+    t.newPos = newPos;
+    t.newRotation = 90.0;
+    QVector<DeviceTransform> changes{t};
     stack.push(new TransformDevicesCommand(changes, QStringLiteral("Move")));
     QCOMPARE(item->rotation(), 90.0);
     QCOMPARE(item->pos(), newPos);
@@ -140,6 +146,28 @@ void TestUndo::editDeviceUndoRedo()
     stack.undo();
     QCOMPARE(item->label(), oldLabel);
     QCOMPARE(int(item->ports().first().level), int(SignalLevel::Mic));
+}
+
+void TestUndo::labelOffsetUndoRedo()
+{
+    StageScene scene(&m_catalog);
+    QUndoStack stack;
+    auto *item = scene.addDevice(QString::fromLatin1(kMic), QPointF(100, 300));
+    QVERIFY(item->labelOffset().isNull());
+
+    const QPointF off(20, -15);
+    DeviceTransform t;
+    t.item = item;
+    t.oldPos = t.newPos = item->pos();
+    t.oldRotation = t.newRotation = item->rotation();
+    t.newLabelOffset = off;
+    stack.push(new TransformDevicesCommand({t}, QStringLiteral("Move Label")));
+    QCOMPARE(item->labelOffset(), off);
+
+    stack.undo();
+    QVERIFY(item->labelOffset().isNull());
+    stack.redo();
+    QCOMPARE(item->labelOffset(), off);
 }
 
 void TestUndo::documentInfoUndoRedo()
@@ -207,8 +235,12 @@ void TestUndo::interleavedAddMoveDelete()
     QVERIFY(item);
     const QPointF p0 = item->pos();
 
-    stack.push(new TransformDevicesCommand(
-        {{item, p0, 0.0, p0 + QPointF(40, 0), 30.0}}, QStringLiteral("Move")));
+    DeviceTransform mv;
+    mv.item = item;
+    mv.oldPos = p0;
+    mv.newPos = p0 + QPointF(40, 0);
+    mv.newRotation = 30.0;
+    stack.push(new TransformDevicesCommand({mv}, QStringLiteral("Move")));
     stack.push(new RemoveDevicesCommand(&scene, {item}));
     QCOMPARE(deviceCount(scene), 0);
 

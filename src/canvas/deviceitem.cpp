@@ -25,6 +25,7 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QLineF>
 #include <QPainter>
+#include <QPolygonF>
 #include <QStyleOptionGraphicsItem>
 #include <QSvgRenderer>
 #include <QVariant>
@@ -108,6 +109,36 @@ void DeviceItem::setChannelBadge(const QString &badge)
     update();
 }
 
+void DeviceItem::setLabelOffset(const QPointF &offset)
+{
+    if (m_labelOffset == offset)
+        return;
+    prepareGeometryChange();  // the label can now reach further out
+    m_labelOffset = offset;
+    update();
+}
+
+QPointF DeviceItem::labelCentreVector() const
+{
+    // Default: centred below the icon's rotated footprint; plus the user offset.
+    const QSizeF half =
+        rotatedHalfExtents(m_iconSize.width(), m_iconSize.height(), rotation());
+    return QPointF(0, half.height() + kLabelGap + kLabelHeight / 2.0) + m_labelOffset;
+}
+
+QRectF DeviceItem::labelSceneRect() const
+{
+    const qreal labelW = qMax(m_iconSize.width(), kLabelMinWidth);
+    const QPointF centre = mapToScene(QPointF(0, 0)) + labelCentreVector();
+    return QRectF(centre.x() - labelW / 2.0, centre.y() - kLabelHeight / 2.0, labelW,
+                  kLabelHeight);
+}
+
+bool DeviceItem::labelContains(const QPointF &scenePoint) const
+{
+    return !m_label.isEmpty() && labelSceneRect().contains(scenePoint);
+}
+
 QRectF DeviceItem::iconRect() const
 {
     const qreal w = m_iconSize.width();
@@ -127,8 +158,9 @@ QRectF DeviceItem::boundingRect() const
     const qreal labelW = qMax(w, kLabelMinWidth);
     const qreal diagHalf = 0.5 * std::hypot(w, h);
     const qreal labelReach = diagHalf + kLabelGap + kLabelHeight;
+    const qreal offsetLen = std::hypot(m_labelOffset.x(), m_labelOffset.y());
     const qreal reach =
-        std::hypot(labelW / 2.0, labelReach) + kBadgeReserve;
+        std::hypot(labelW / 2.0, labelReach) + kBadgeReserve + offsetLen;
     return QRectF(-reach, -reach, 2.0 * reach, 2.0 * reach);
 }
 
@@ -148,6 +180,15 @@ QPainterPath DeviceItem::shape() const
     // selected, also include the rotation-handle grab circle.
     QPainterPath path;
     path.addRect(iconRect());
+    // The label is clickable too (to select and to drag it).
+    if (!m_label.isEmpty()) {
+        const QRectF ls = labelSceneRect();
+        QPolygonF poly;
+        poly << mapFromScene(ls.topLeft()) << mapFromScene(ls.topRight())
+             << mapFromScene(ls.bottomRight()) << mapFromScene(ls.bottomLeft());
+        path.addPolygon(poly);
+        path.closeSubpath();
+    }
     if (isSelected()) {
         const QPointF handle = mapFromScene(rotationHandleScenePos());
         path.addEllipse(handle, kHandleRadius + 4.0, kHandleRadius + 4.0);
@@ -193,8 +234,9 @@ void DeviceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
         painter->setFont(font);
         painter->setPen(QColor(0x22, 0x22, 0x22));
         const qreal labelW = qMax(w, kLabelMinWidth);
-        const QRectF labelRect(-labelW / 2.0, half.height() + kLabelGap, labelW,
-                               kLabelHeight);
+        const QRectF labelRect =
+            QRectF(-labelW / 2.0, half.height() + kLabelGap, labelW, kLabelHeight)
+                .translated(m_labelOffset);
         painter->drawText(labelRect, Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
                           m_label);
     }
@@ -237,13 +279,24 @@ void DeviceItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
 
 void DeviceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
-    if (isSelected() && event->button() == Qt::LeftButton
-        && QLineF(event->scenePos(), rotationHandleScenePos()).length()
-               <= kHandleRadius + 5.0) {
-        m_rotating = true;
-        setCursor(Qt::ClosedHandCursor);
-        event->accept();
-        return;
+    if (isSelected() && event->button() == Qt::LeftButton) {
+        // Grab the rotation handle…
+        if (QLineF(event->scenePos(), rotationHandleScenePos()).length()
+            <= kHandleRadius + 5.0) {
+            m_rotating = true;
+            setCursor(Qt::ClosedHandCursor);
+            event->accept();
+            return;
+        }
+        // …or the label, to reposition it.
+        if (labelContains(event->scenePos())) {
+            m_movingLabel = true;
+            m_labelGrabScene = (mapToScene(QPointF(0, 0)) + labelCentreVector())
+                               - event->scenePos();
+            setCursor(Qt::ClosedHandCursor);
+            event->accept();
+            return;
+        }
     }
     QGraphicsObject::mousePressEvent(event);
 }
@@ -260,13 +313,25 @@ void DeviceItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         event->accept();
         return;
     }
+    if (m_movingLabel) {
+        // Keep the grabbed point under the cursor; store the result as an offset
+        // from the default (below-the-footprint) position.
+        const QSizeF half =
+            rotatedHalfExtents(m_iconSize.width(), m_iconSize.height(), rotation());
+        const QPointF defaultCentre(0, half.height() + kLabelGap + kLabelHeight / 2.0);
+        const QPointF centre = event->scenePos() + m_labelGrabScene;
+        setLabelOffset(centre - mapToScene(QPointF(0, 0)) - defaultCentre);
+        event->accept();
+        return;
+    }
     QGraphicsObject::mouseMoveEvent(event);
 }
 
 void DeviceItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
-    if (m_rotating) {
+    if (m_rotating || m_movingLabel) {
         m_rotating = false;
+        m_movingLabel = false;
         setCursor(Qt::OpenHandCursor);
         event->accept();
         return;

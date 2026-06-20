@@ -51,8 +51,10 @@ struct DeviceTransform
     DeviceItem *item = nullptr;
     QPointF oldPos;
     qreal oldRotation = 0.0;
+    QPointF oldLabelOffset;
     QPointF newPos;
     qreal newRotation = 0.0;
+    QPointF newLabelOffset;
 };
 
 class StageScene : public QGraphicsScene
@@ -147,8 +149,8 @@ private:
     bool m_inputListVisible = true;
 
     // Transforms of the selected devices captured at mouse-press, to diff on
-    // release into a single move/rotate undo step.
-    QHash<DeviceItem *, QPair<QPointF, qreal>> m_dragStart;
+    // release into a single move/rotate/label undo step.
+    QHash<DeviceItem *, DeviceTransform> m_dragStart;
 };
 
 #endif // STAGESCENE_H

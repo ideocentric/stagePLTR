@@ -55,6 +55,17 @@ public:
     // assigned by the scene during renumbering. Empty = no badge.
     void setChannelBadge(const QString &badge);
 
+    // User offset of the label from its default spot below the icon. Stored
+    // relative to the device (so it moves and rotates-anchors with it); empty =
+    // the default position. The label text stays upright regardless.
+    QPointF labelOffset() const { return m_labelOffset; }
+    void setLabelOffset(const QPointF &offset);
+
+    // The label's rectangle in scene coordinates, and a hit-test against it
+    // (used to drag the label and to double-click-reset it).
+    QRectF labelSceneRect() const;
+    bool labelContains(const QPointF &scenePoint) const;
+
     // The icon's own rectangle (centred on the origin), used for hit-testing and
     // for keeping the device within the stage area — independent of the larger
     // bounding rect that must also reserve room for the upright label/badge.
@@ -75,14 +86,20 @@ private:
     // Scene position of the rotation handle (above the icon's footprint), and a
     // hit-test against it. Only meaningful while the item is selected.
     QPointF rotationHandleScenePos() const;
+    // Scene-aligned vector from the device centre to the label centre, including
+    // the user offset.
+    QPointF labelCentreVector() const;
 
     QString m_typeId;
     QString m_label;
     QSizeF m_iconSize;
     QList<Port> m_ports;
     QString m_channelBadge;
+    QPointF m_labelOffset;               // user displacement from the default spot
     QSvgRenderer *m_renderer = nullptr;  // owned (child QObject)
     bool m_rotating = false;             // dragging the rotation handle
+    bool m_movingLabel = false;          // dragging the label
+    QPointF m_labelGrabScene;            // cursor->label-centre delta while dragging
 };
 
 #endif // DEVICEITEM_H

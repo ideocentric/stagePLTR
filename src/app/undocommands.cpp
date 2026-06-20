@@ -104,6 +104,7 @@ void TransformDevicesCommand::redo()
     for (const DeviceTransform &c : std::as_const(m_changes)) {
         c.item->setPos(c.newPos);
         c.item->setRotation(c.newRotation);
+        c.item->setLabelOffset(c.newLabelOffset);
     }
 }
 
@@ -112,6 +113,7 @@ void TransformDevicesCommand::undo()
     for (const DeviceTransform &c : std::as_const(m_changes)) {
         c.item->setPos(c.oldPos);
         c.item->setRotation(c.oldRotation);
+        c.item->setLabelOffset(c.oldLabelOffset);
     }
 }
 

@@ -359,10 +359,15 @@ void MainWindow::handleDrop(const QString &typeId, const QPointF &scenePos)
 void MainWindow::handleTransforms(const QVector<DeviceTransform> &changes)
 {
     bool moved = false;
-    for (const DeviceTransform &c : changes)
+    bool rotated = false;
+    for (const DeviceTransform &c : changes) {
         moved = moved || c.newPos != c.oldPos;
-    m_undoStack->push(new TransformDevicesCommand(
-        changes, moved ? tr("Move Device(s)") : tr("Rotate Device(s)")));
+        rotated = rotated || c.newRotation != c.oldRotation;
+    }
+    const QString text = moved      ? tr("Move Device(s)")
+                         : rotated  ? tr("Rotate Device(s)")
+                                    : tr("Move Label");
+    m_undoStack->push(new TransformDevicesCommand(changes, text));
 }
 
 void MainWindow::handlePortEdit()
@@ -480,8 +485,13 @@ void MainWindow::rotateSelection(double degrees)
         if (item->type() != DeviceItem::Type)
             continue;
         auto *device = static_cast<DeviceItem *>(item);
-        changes.append({device, device->pos(), device->rotation(), device->pos(),
-                        device->rotation() + degrees});
+        DeviceTransform t;
+        t.item = device;
+        t.oldPos = t.newPos = device->pos();
+        t.oldRotation = device->rotation();
+        t.newRotation = device->rotation() + degrees;
+        t.oldLabelOffset = t.newLabelOffset = device->labelOffset();
+        changes.append(t);
     }
     if (!changes.isEmpty())
         m_undoStack->push(new TransformDevicesCommand(changes, tr("Rotate Device(s)")));

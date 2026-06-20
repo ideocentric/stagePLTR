@@ -17,9 +17,11 @@
  */
 
 #include "devicecatalog.h"
+#include "deviceitem.h"
 #include "stagescene.h"
 
 #include <QFile>
+#include <QJsonObject>
 #include <QtTest>
 
 namespace {
@@ -41,6 +43,7 @@ private slots:
     void emptySceneHasNoChannels();
     void monoOutputsNumberSequentially();
     void stereoOutputGroupsIntoRange();
+    void labelOffsetPersists();
 };
 
 void TestStageScene::emptySceneHasNoChannels()
@@ -80,6 +83,25 @@ void TestStageScene::stereoOutputGroupsIntoRange()
     const InputListEntry entry = scene.inputListEntries().first();
     QCOMPARE(entry.numbers, QStringLiteral("1–2"));  // "1–2"
     QCOMPARE(entry.signalWord, QStringLiteral("Stereo"));
+}
+
+void TestStageScene::labelOffsetPersists()
+{
+    DeviceCatalog catalog = loadCatalog();
+    StageScene scene(&catalog);
+    auto *item = scene.addDevice(QStringLiteral("mic-straight-overhead"), QPointF(100, 300));
+    const QPointF off(12, -8);
+    item->setLabelOffset(off);
+
+    StageScene reloaded(&catalog);
+    reloaded.fromJson(scene.toJson());
+
+    DeviceItem *restored = nullptr;
+    for (QGraphicsItem *gi : reloaded.items())
+        if (gi->type() == DeviceItem::Type)
+            restored = static_cast<DeviceItem *>(gi);
+    QVERIFY(restored);
+    QCOMPARE(restored->labelOffset(), off);
 }
 
 QTEST_MAIN(TestStageScene)
