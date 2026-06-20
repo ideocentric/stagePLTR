@@ -17,6 +17,7 @@
  */
 
 #include "devicecatalog.h"
+#include "deviceicon.h"
 #include "deviceitem.h"
 #include "stagescene.h"
 
@@ -44,6 +45,7 @@ private slots:
     void monoOutputsNumberSequentially();
     void stereoOutputGroupsIntoRange();
     void labelOffsetPersists();
+    void embeddedObjectResolves();
 };
 
 void TestStageScene::emptySceneHasNoChannels()
@@ -102,6 +104,31 @@ void TestStageScene::labelOffsetPersists()
             restored = static_cast<DeviceItem *>(gi);
     QVERIFY(restored);
     QCOMPARE(restored->labelOffset(), off);
+}
+
+void TestStageScene::embeddedObjectResolves()
+{
+    // Simulate opening a plot whose embedded custom object isn't in the local
+    // library: register it from its embedded JSON, then its device must place.
+    DeviceType custom;
+    custom.id = QStringLiteral("custom-thing");
+    custom.name = QStringLiteral("Custom Thing");
+    custom.category = QStringLiteral("DJ");
+    custom.icon = DeviceIcon::fromPath(
+        QStringLiteral(STAGEPLT_ASSETS_DIR "/mic-straight-overhead.svg"));
+    Port out;
+    out.direction = PortDirection::Output;
+    out.toConsole = true;
+    custom.ports.append(out);
+    const QJsonObject embedded = DeviceCatalog::toEmbeddedJson(custom);
+
+    DeviceCatalog catalog = loadCatalog();
+    QVERIFY(catalog.find(QStringLiteral("custom-thing")) == nullptr);  // not there yet
+    catalog.addInMemoryObject(DeviceCatalog::fromEmbeddedJson(embedded));
+
+    StageScene scene(&catalog);
+    QVERIFY(scene.addDevice(QStringLiteral("custom-thing"), QPointF(100, 300)));
+    QCOMPARE(scene.channels().size(), 1);  // its console output numbered
 }
 
 QTEST_MAIN(TestStageScene)

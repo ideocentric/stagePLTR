@@ -89,6 +89,7 @@ private:
     void deleteObject(const QString &id);
     void openObjectEditor(const DeviceType &seed);
     QString makeUniqueObjectId(const QString &base) const;
+    void offerToImportObjects(const QStringList &ids);
 
     bool maybeSave();                       // prompt if modified; false to cancel
     bool saveToFile(const QString &path);

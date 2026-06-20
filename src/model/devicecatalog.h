@@ -24,6 +24,8 @@
 #include <QList>
 #include <QString>
 
+class QJsonObject;
+
 // Loads and holds the set of available DeviceTypes from a JSON catalog.
 //
 // The catalog format is data-driven so the device library can grow without
@@ -64,6 +66,13 @@ public:
     bool loadUserLibrary(QString *error = nullptr);
     bool addUserObject(const DeviceType &type, QString *error = nullptr);
     bool removeUserObject(const QString &id, QString *error = nullptr);
+
+    // Portability: a custom object embedded in a .splot (icon as base64 bytes).
+    static QJsonObject toEmbeddedJson(const DeviceType &type);
+    static DeviceType fromEmbeddedJson(const QJsonObject &obj);
+    // Make an object available for this session without writing it to disk
+    // (used for embedded objects until the user imports them).
+    void addInMemoryObject(const DeviceType &type);
 
 private:
     bool saveUserLibrary(QString *error);

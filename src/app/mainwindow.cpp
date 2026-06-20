@@ -42,6 +42,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -52,6 +53,7 @@
 #include <QHeaderView>
 #include <QSaveFile>
 #include <QScreen>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QShowEvent>
@@ -651,6 +653,23 @@ bool MainWindow::saveToFile(const QString &path)
     }
     QJsonObject root = m_scene->toJson();
     root[QStringLiteral("info")] = m_scene->documentInfo().toJson();
+
+    // Embed any custom (user) objects the plot uses, so it opens on any machine.
+    QJsonArray customs;
+    QSet<QString> seen;
+    for (QGraphicsItem *gi : m_scene->items()) {
+        if (gi->type() != DeviceItem::Type)
+            continue;
+        const QString typeId = static_cast<DeviceItem *>(gi)->typeId();
+        if (seen.contains(typeId) || !m_catalog.isUserObject(typeId))
+            continue;
+        seen.insert(typeId);
+        if (const DeviceType *t = m_catalog.find(typeId))
+            customs.append(DeviceCatalog::toEmbeddedJson(*t));
+    }
+    if (!customs.isEmpty())
+        root[QStringLiteral("customObjects")] = customs;
+
     const QJsonDocument doc(root);
     file.write(doc.toJson(QJsonDocument::Indented));
     if (!file.commit()) {
@@ -682,10 +701,24 @@ bool MainWindow::loadFromFile(const QString &path)
         return false;
     }
 
+    const QJsonObject root = doc.object();
+
+    // Register any embedded custom objects (icons included) before parsing the
+    // scene, so their placed devices resolve and render. Track the ones our
+    // library doesn't already have, to offer importing them afterwards.
+    QStringList newObjectIds;
+    const QJsonArray customs = root.value(QStringLiteral("customObjects")).toArray();
+    for (const QJsonValue &value : customs) {
+        const DeviceType type = DeviceCatalog::fromEmbeddedJson(value.toObject());
+        if (type.id.isEmpty() || m_catalog.find(type.id))
+            continue;  // empty, or we already have it — keep our own copy
+        m_catalog.addInMemoryObject(type);
+        newObjectIds.append(type.id);
+    }
+
     // Suppress live signals while we populate the scene programmatically.
     {
         const QSignalBlocker blocker(m_scene);
-        const QJsonObject root = doc.object();
         m_scene->setDocumentInfo(
             DocumentInfo::fromJson(root.value(QStringLiteral("info")).toObject()));
         QString error;
@@ -695,13 +728,34 @@ bool MainWindow::loadFromFile(const QString &path)
     }
     // Channel signals were blocked during load; sync the breakout view now.
     m_channelModel->setChannels(m_scene->channels());
+    if (!newObjectIds.isEmpty())
+        m_palette->populate(m_catalog);  // show the just-registered objects
     m_undoStack->clear();  // a freshly loaded document starts clean
     refreshProperties();
 
     setCurrentFile(path);
     updateWindowTitle();
     statusBar()->showMessage(tr("Opened %1").arg(QFileInfo(path).fileName()), 3000);
+
+    offerToImportObjects(newObjectIds);
     return true;
+}
+
+void MainWindow::offerToImportObjects(const QStringList &ids)
+{
+    if (ids.isEmpty())
+        return;
+    const auto choice = QMessageBox::question(
+        this, tr("Custom Objects"),
+        tr("This plot uses %1 custom object(s) not in your library.\n"
+           "Add them to your library so you can reuse them?")
+            .arg(ids.size()),
+        QMessageBox::Yes | QMessageBox::No);
+    if (choice != QMessageBox::Yes)
+        return;
+    for (const QString &id : ids)
+        if (const DeviceType *type = m_catalog.find(id))
+            m_catalog.addUserObject(*type);  // persist to the library
 }
 
 void MainWindow::setCurrentFile(const QString &path)

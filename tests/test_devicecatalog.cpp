@@ -21,6 +21,7 @@
 #include "devicetype.h"
 
 #include <QFile>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -41,6 +42,7 @@ class TestDeviceCatalog : public QObject
 private slots:
     void loadsRealCatalog();
     void userLibraryRoundTrip();
+    void embeddedObjectRoundTrip();
     void categoriesRemapped();
     void orderedCategoriesMatchDeclaredOrder();
     void appendsUnlistedCategory();
@@ -102,6 +104,31 @@ void TestDeviceCatalog::userLibraryRoundTrip()
 
     QVERIFY(reloaded.removeUserObject(QStringLiteral("user-thing")));
     QVERIFY(reloaded.find(QStringLiteral("user-thing")) == nullptr);
+}
+
+void TestDeviceCatalog::embeddedObjectRoundTrip()
+{
+    DeviceType obj;
+    obj.id = QStringLiteral("emb");
+    obj.name = QStringLiteral("Embedded");
+    obj.category = QStringLiteral("DJ");
+    obj.defaultSize = QSizeF(50, 30);
+    obj.icon = DeviceIcon::fromPath(
+        QStringLiteral(STAGEPLT_ASSETS_DIR "/mic-straight-overhead.svg"));
+    Port port;
+    port.label = QStringLiteral("Out");
+    obj.ports.append(port);
+
+    const DeviceType r = DeviceCatalog::fromEmbeddedJson(DeviceCatalog::toEmbeddedJson(obj));
+    QCOMPARE(r.id, QStringLiteral("emb"));
+    QCOMPARE(r.name, QStringLiteral("Embedded"));
+    QCOMPARE(r.category, QStringLiteral("DJ"));
+    const QSizeF expectedSize(50, 30);
+    QCOMPARE(r.defaultSize, expectedSize);
+    QVERIFY(!r.builtin);
+    QCOMPARE(r.ports.size(), 1);
+    QVERIFY(r.icon.isSvg());
+    QCOMPARE(r.icon.data(), obj.icon.data());  // icon bytes travel with the file
 }
 
 void TestDeviceCatalog::categoriesRemapped()

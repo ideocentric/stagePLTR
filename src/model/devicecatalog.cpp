@@ -291,6 +291,58 @@ bool DeviceCatalog::addUserObject(const DeviceType &type, QString *error)
     return saveUserLibrary(error);
 }
 
+QJsonObject DeviceCatalog::toEmbeddedJson(const DeviceType &type)
+{
+    QJsonObject obj;
+    obj[QStringLiteral("id")] = type.id;
+    obj[QStringLiteral("name")] = type.name;
+    obj[QStringLiteral("category")] = type.category;
+    obj[QStringLiteral("defaultSize")] =
+        QJsonArray{type.defaultSize.width(), type.defaultSize.height()};
+    QJsonArray ports;
+    for (const Port &port : type.ports)
+        ports.append(port.toJson());
+    obj[QStringLiteral("ports")] = ports;
+    // Icon travels with the file as base64 bytes so the plot opens anywhere.
+    obj[QStringLiteral("iconData")] = QString::fromLatin1(type.icon.data().toBase64());
+    obj[QStringLiteral("iconFormat")] = type.icon.format();
+    return obj;
+}
+
+DeviceType DeviceCatalog::fromEmbeddedJson(const QJsonObject &obj)
+{
+    DeviceType type;
+    type.id = obj.value(QStringLiteral("id")).toString();
+    type.name = obj.value(QStringLiteral("name")).toString(type.id);
+    type.category = obj.value(QStringLiteral("category")).toString(QStringLiteral("Other"));
+    type.builtin = false;
+
+    const QJsonArray size = obj.value(QStringLiteral("defaultSize")).toArray();
+    if (size.size() == 2)
+        type.defaultSize = QSizeF(size.at(0).toDouble(48.0), size.at(1).toDouble(48.0));
+    const QJsonArray ports = obj.value(QStringLiteral("ports")).toArray();
+    for (const QJsonValue &portValue : ports)
+        type.ports.append(Port::fromJson(portValue.toObject()));
+
+    const QByteArray data =
+        QByteArray::fromBase64(obj.value(QStringLiteral("iconData")).toString().toLatin1());
+    type.icon = DeviceIcon(data, obj.value(QStringLiteral("iconFormat")).toString());
+    return type;
+}
+
+void DeviceCatalog::addInMemoryObject(const DeviceType &type)
+{
+    DeviceType stored = type;
+    stored.builtin = false;
+    for (int i = 0; i < m_devices.size(); ++i) {
+        if (m_devices.at(i).id == stored.id && !m_devices.at(i).builtin) {
+            m_devices.removeAt(i);
+            break;
+        }
+    }
+    m_devices.append(stored);
+}
+
 bool DeviceCatalog::removeUserObject(const QString &id, QString *error)
 {
     int index = -1;
