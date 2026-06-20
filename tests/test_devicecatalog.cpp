@@ -17,9 +17,11 @@
  */
 
 #include "devicecatalog.h"
+#include "deviceicon.h"
 #include "devicetype.h"
 
 #include <QFile>
+#include <QTemporaryDir>
 #include <QtTest>
 
 namespace {
@@ -38,6 +40,7 @@ class TestDeviceCatalog : public QObject
 
 private slots:
     void loadsRealCatalog();
+    void userLibraryRoundTrip();
     void categoriesRemapped();
     void orderedCategoriesMatchDeclaredOrder();
     void appendsUnlistedCategory();
@@ -56,6 +59,49 @@ void TestDeviceCatalog::loadsRealCatalog()
     QVERIFY(synth != nullptr);
     QCOMPARE(synth->category, QStringLiteral("Keyboards"));
     QVERIFY(catalog.find(QStringLiteral("does-not-exist")) == nullptr);
+}
+
+void TestDeviceCatalog::userLibraryRoundTrip()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+
+    DeviceCatalog catalog;
+    QVERIFY(catalog.loadFromJson(realCatalogJson(), QStringLiteral(STAGEPLT_ASSETS_DIR)));
+    catalog.setUserLibraryPath(tmp.path());
+    const int builtinCount = catalog.devices().size();
+
+    DeviceType obj;
+    obj.id = QStringLiteral("user-thing");
+    obj.name = QStringLiteral("My Thing");
+    obj.category = QStringLiteral("Lighting");  // a brand-new category
+    obj.icon = DeviceIcon::fromPath(
+        QStringLiteral(STAGEPLT_ASSETS_DIR "/mic-straight-overhead.svg"));
+    obj.defaultSize = QSizeF(60, 40);           // non-square, allowed for custom
+
+    QString error;
+    QVERIFY2(catalog.addUserObject(obj, &error), qPrintable(error));
+    QCOMPARE(catalog.devices().size(), builtinCount + 1);
+    QVERIFY(catalog.isUserObject(QStringLiteral("user-thing")));
+    QVERIFY(!catalog.isUserObject(QStringLiteral("mic-straight-overhead")));  // built-in
+
+    // Reload from disk into a fresh catalog.
+    DeviceCatalog reloaded;
+    QVERIFY(reloaded.loadFromJson(realCatalogJson(), QStringLiteral(STAGEPLT_ASSETS_DIR)));
+    reloaded.setUserLibraryPath(tmp.path());
+    QVERIFY(reloaded.loadUserLibrary());
+
+    const DeviceType *restored = reloaded.find(QStringLiteral("user-thing"));
+    QVERIFY(restored != nullptr);
+    QCOMPARE(restored->name, QStringLiteral("My Thing"));
+    QVERIFY(!restored->builtin);
+    QVERIFY(restored->icon.isValid());
+    const QSizeF expectedSize(60, 40);
+    QCOMPARE(restored->defaultSize, expectedSize);
+    QVERIFY(reloaded.orderedCategories().contains(QStringLiteral("Lighting")));
+
+    QVERIFY(reloaded.removeUserObject(QStringLiteral("user-thing")));
+    QVERIFY(reloaded.find(QStringLiteral("user-thing")) == nullptr);
 }
 
 void TestDeviceCatalog::categoriesRemapped()

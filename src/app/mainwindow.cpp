@@ -35,6 +35,7 @@
 #include <QCloseEvent>
 #include <QCursor>
 #include <QDate>
+#include <QDir>
 #include <QDockWidget>
 #include <QFile>
 #include <QFileDialog>
@@ -51,6 +52,7 @@
 #include <QSaveFile>
 #include <QScreen>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QShowEvent>
 #include <QSignalBlocker>
 #include <QStatusBar>
@@ -71,6 +73,11 @@ MainWindow::MainWindow(QWidget *parent)
         QMessageBox::warning(this, tr("Device Catalog"),
                              tr("Could not load the device catalog:\n%1").arg(error));
     }
+    // Merge the user's own objects (created via duplicate/edit) from app data.
+    m_catalog.setUserLibraryPath(
+        QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+            .filePath(QStringLiteral("objects")));
+    m_catalog.loadUserLibrary();
 
     m_scene = new StageScene(&m_catalog, this);
     m_scene->setPageConfig(pageconfig::load(DocumentFeature::StagePlot));

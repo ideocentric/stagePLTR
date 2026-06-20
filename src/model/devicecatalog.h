@@ -54,10 +54,23 @@ public:
     QStringList orderedCategories() const;
 
     bool isEmpty() const { return m_devices.isEmpty(); }
+    bool isUserObject(const QString &id) const;  // user-created (editable) vs built-in
+
+    // The writable user library: a directory holding objects.json + icon files.
+    // Built-ins and user objects are merged into one catalog so the scene can
+    // find() either. Mutations persist to disk immediately.
+    void setUserLibraryPath(const QString &dir);
+    QString userLibraryPath() const { return m_userDir; }
+    bool loadUserLibrary(QString *error = nullptr);
+    bool addUserObject(const DeviceType &type, QString *error = nullptr);
+    bool removeUserObject(const QString &id, QString *error = nullptr);
 
 private:
+    bool saveUserLibrary(QString *error);
+
     QList<DeviceType> m_devices;
     QStringList m_categoryOrder;  // from the catalog's "categories" array
+    QString m_userDir;            // user-library directory (empty = disabled)
 };
 
 #endif // DEVICECATALOG_H
