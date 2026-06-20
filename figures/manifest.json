@@ -1,0 +1,29 @@
+{
+  "_comment": "Generation manifest for figures/objects. See spec.md for the rules. This is a starting skeleton — reconcile with the existing generate.py schema when wiring step (b).",
+
+  "scale_mm_per_px": 10,
+  "render_frame_mm": 2000,
+  "layer_order": ["body", "hair", "instrument", "accessories"],
+  "mirror_layers": ["body", "hair"],
+
+  "axes": {
+    "build": ["masc", "fem"],
+    "hair": ["short", "long", "bald"]
+  },
+
+  "objects": [
+    {
+      "id": "figure-guitar",
+      "name": "Guitarist",
+      "category": "People",
+      "footprint_mm": [520, 980],
+      "instrument": "guitar",
+      "vary": ["build", "hair"],
+      "handedness": ["right", "left"],
+      "parts": {
+        "instrument": "parts/instruments/guitar.svg"
+      },
+      "ports": []
+    }
+  ]
+}

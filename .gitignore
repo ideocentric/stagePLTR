@@ -179,3 +179,17 @@ dist/
 .cache/
 tmp/
 temp/
+##############################
+# figures/ pipeline (Python + 3D working files)
+##############################
+figures/.venv/
+figures/.blendsrc/
+figures/out/*.svg
+figures/out/index.html
+*.blend
+*.blend1
+*.mhm
+*.fbx
+*.obj
+*.duf
+*.dsf

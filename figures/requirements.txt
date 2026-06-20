@@ -1,0 +1,5 @@
+# Python dependencies for the figures 2D compositor (figures/generate.py).
+# Finalized in step (b) once generate.py is wired up; pin exact versions there.
+#
+# Likely needs (uncomment/confirm when generate.py lands):
+# lxml            # robust SVG (XML) parsing + manipulation for compositing/cropping
