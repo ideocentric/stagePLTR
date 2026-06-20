@@ -121,13 +121,14 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    // The scene is a child QObject, so it is destroyed by ~QWidget's
-    // deleteChildren() — after the MainWindow-derived part of this object is
-    // already gone. Tearing the scene down deletes its DeviceItems, and
-    // removing a selected item emits selectionChanged (and plotChanged), which
-    // are wired to MainWindow slots. Delivering a signal to a half-destroyed
-    // MainWindow makes Qt abort (assertObjectType). Sever those connections
-    // now, while `this` is still a valid MainWindow.
+    // The scene and the undo stack are child QObjects, destroyed by ~QWidget's
+    // deleteChildren() after the MainWindow-derived part of this object is gone.
+    // Their teardown emits signals wired to MainWindow slots that touch the
+    // (dying) scene: the scene fires selectionChanged as its items are removed,
+    // and ~QUndoStack calls clear() which fires indexChanged → refreshProperties.
+    // Sever both now, while `this` is still a valid MainWindow.
+    if (m_undoStack)
+        m_undoStack->disconnect(this);
     if (m_scene)
         m_scene->disconnect(this);
 }
