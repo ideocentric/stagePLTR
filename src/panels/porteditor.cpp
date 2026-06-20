@@ -58,10 +58,12 @@ PortEditor::PortEditor(QWidget *parent)
     auto *editor = new QWidget;
     auto *layout = new QVBoxLayout(editor);
 
-    auto *form = new QFormLayout;
+    m_labelRow = new QWidget;
+    auto *form = new QFormLayout(m_labelRow);
+    form->setContentsMargins(0, 0, 0, 0);
     m_labelEdit = new QLineEdit;
     form->addRow(tr("Label:"), m_labelEdit);
-    layout->addLayout(form);
+    layout->addWidget(m_labelRow);
 
     m_table = new QTableWidget(0, EcCount);
     m_table->setHorizontalHeaderLabels(
@@ -106,6 +108,11 @@ void PortEditor::setDevice(DeviceItem *item)
 {
     m_item = item;
     rebuild();
+}
+
+void PortEditor::setLabelRowVisible(bool visible)
+{
+    m_labelRow->setVisible(visible);
 }
 
 void PortEditor::rebuild()

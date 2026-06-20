@@ -22,6 +22,7 @@
 #include "devicepalette.h"
 #include "deviceitem.h"
 #include "documentinfodialog.h"
+#include "objecteditordialog.h"
 #include "pageconfig.h"
 #include "pdfexporter.h"
 #include "porteditor.h"
@@ -306,6 +307,8 @@ void MainWindow::createPalette()
 
     connect(m_palette, &DevicePalette::deviceActivated,
             this, &MainWindow::addDeviceAtCentre);
+    connect(m_palette, &DevicePalette::objectContextMenu,
+            this, &MainWindow::showObjectMenu);
 }
 
 void MainWindow::createPropertiesDock()
@@ -508,6 +511,86 @@ void MainWindow::addDeviceAtCentre(const QString &typeId)
 {
     const QPointF centre = m_view->mapToScene(m_view->viewport()->rect().center());
     m_undoStack->push(new AddDeviceCommand(m_scene, typeId, centre));
+}
+
+void MainWindow::showObjectMenu(const QString &typeId, const QPoint &globalPos)
+{
+    if (!m_catalog.find(typeId))
+        return;
+    const bool isUser = m_catalog.isUserObject(typeId);
+
+    QMenu menu(this);
+    QAction *dup = menu.addAction(tr("Duplicate…"));
+    QAction *edit = menu.addAction(tr("Edit…"));
+    QAction *del = menu.addAction(tr("Delete"));
+    edit->setEnabled(isUser);  // built-ins are read-only
+    del->setEnabled(isUser);
+
+    QAction *chosen = menu.exec(globalPos);
+    if (chosen == dup)
+        duplicateObject(typeId);
+    else if (chosen == edit)
+        editObject(typeId);
+    else if (chosen == del)
+        deleteObject(typeId);
+}
+
+QString MainWindow::makeUniqueObjectId(const QString &base) const
+{
+    QString candidate = base + QStringLiteral("-copy");
+    for (int n = 2; m_catalog.find(candidate); ++n)
+        candidate = base + QStringLiteral("-copy-") + QString::number(n);
+    return candidate;
+}
+
+void MainWindow::duplicateObject(const QString &id)
+{
+    const DeviceType *src = m_catalog.find(id);
+    if (!src)
+        return;
+    DeviceType copy = *src;
+    copy.id = makeUniqueObjectId(src->id);
+    copy.name = src->name + tr(" copy");
+    copy.builtin = false;
+    openObjectEditor(copy);
+}
+
+void MainWindow::editObject(const QString &id)
+{
+    const DeviceType *obj = m_catalog.find(id);
+    if (obj && !obj->builtin)
+        openObjectEditor(*obj);
+}
+
+void MainWindow::openObjectEditor(const DeviceType &seed)
+{
+    ObjectEditorDialog dialog(seed, m_catalog.orderedCategories(), this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    QString error;
+    if (!m_catalog.addUserObject(dialog.object(), &error)) {
+        QMessageBox::warning(this, tr("Save Object"), error);
+        return;
+    }
+    m_palette->populate(m_catalog);
+}
+
+void MainWindow::deleteObject(const QString &id)
+{
+    const DeviceType *obj = m_catalog.find(id);
+    if (!obj || obj->builtin)  // user objects only
+        return;
+    if (QMessageBox::question(
+            this, tr("Delete Object"),
+            tr("Remove \"%1\" from your object library?").arg(obj->name))
+        != QMessageBox::Yes)
+        return;
+    QString error;
+    if (!m_catalog.removeUserObject(id, &error)) {
+        QMessageBox::warning(this, tr("Delete Object"), error);
+        return;
+    }
+    m_palette->populate(m_catalog);
 }
 
 void MainWindow::openPreferences()

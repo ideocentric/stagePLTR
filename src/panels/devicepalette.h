@@ -38,6 +38,7 @@ public:
 
 signals:
     void deviceActivated(const QString &typeId);
+    void objectContextMenu(const QString &typeId, const QPoint &globalPos);
 
 private:
     void clearSections();

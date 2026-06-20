@@ -63,6 +63,8 @@ set(CORE_SOURCES
     src/panels/channeltablemodel.h
     src/panels/documentinfodialog.cpp
     src/panels/documentinfodialog.h
+    src/panels/objecteditordialog.cpp
+    src/panels/objecteditordialog.h
     src/panels/preferencesdialog.cpp
     src/panels/preferencesdialog.h
 

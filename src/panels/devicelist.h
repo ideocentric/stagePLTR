@@ -39,10 +39,13 @@ public:
 
 signals:
     void deviceActivated(const QString &typeId);
+    // Right-click on an item: the device id and the screen position for a menu.
+    void contextMenuRequested(const QString &typeId, const QPoint &globalPos);
 
 protected:
     QMimeData *mimeData(const QList<QListWidgetItem *> &items) const override;
     QStringList mimeTypes() const override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
     static QString idOf(const QListWidgetItem *item);

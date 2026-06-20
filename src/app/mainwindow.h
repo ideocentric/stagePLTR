@@ -55,6 +55,7 @@ private slots:
     void handleDrop(const QString &typeId, const QPointF &scenePos);
     void handleTransforms(const QVector<DeviceTransform> &changes);
     void handlePortEdit();
+    void showObjectMenu(const QString &typeId, const QPoint &globalPos);
     void resetWindowLayout();
     void newPlot();
     void openPlot();
@@ -81,6 +82,13 @@ private:
     void saveWindowGeometry();
     void centerOnScreen();
     QSize defaultWindowSize() const;
+
+    // Object-library actions (right-click a palette item).
+    void duplicateObject(const QString &id);
+    void editObject(const QString &id);
+    void deleteObject(const QString &id);
+    void openObjectEditor(const DeviceType &seed);
+    QString makeUniqueObjectId(const QString &base) const;
 
     bool maybeSave();                       // prompt if modified; false to cancel
     bool saveToFile(const QString &path);

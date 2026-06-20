@@ -23,6 +23,7 @@
 
 #include <QFont>
 #include <QFontMetrics>
+#include <QContextMenuEvent>
 #include <QIcon>
 #include <QMimeData>
 
@@ -97,6 +98,14 @@ void DeviceList::addPlaceholder(const QString &text)
     item->setFlags(Qt::NoItemFlags);  // not selectable, draggable, or activatable
     item->setForeground(QColor(0x9a, 0x9d, 0xa1));
     item->setTextAlignment(Qt::AlignCenter);
+}
+
+void DeviceList::contextMenuEvent(QContextMenuEvent *event)
+{
+    const QString id = idOf(itemAt(event->pos()));
+    if (id.isEmpty())
+        return;  // not on a device (e.g. empty space / "coming soon")
+    emit contextMenuRequested(id, event->globalPos());
 }
 
 QString DeviceList::idOf(const QListWidgetItem *item)

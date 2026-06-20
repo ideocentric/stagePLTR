@@ -43,6 +43,9 @@ public:
     // Bind to a device (null clears the panel).
     void setDevice(DeviceItem *item);
 
+    // Hide the built-in label row (the object editor supplies its own name field).
+    void setLabelRowVisible(bool visible);
+
 signals:
     void edited();
 
@@ -71,6 +74,7 @@ private:
     bool m_building = false;
 
     QStackedWidget *m_stack = nullptr;
+    QWidget *m_labelRow = nullptr;
     QLineEdit *m_labelEdit = nullptr;
     QTableWidget *m_table = nullptr;
     QPushButton *m_removeButton = nullptr;

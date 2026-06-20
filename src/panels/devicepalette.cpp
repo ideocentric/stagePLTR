@@ -76,6 +76,8 @@ void DevicePalette::populate(const DeviceCatalog &catalog)
             list->addPlaceholder(tr("Coming soon"));
 
         connect(list, &DeviceList::deviceActivated, this, &DevicePalette::deviceActivated);
+        connect(list, &DeviceList::contextMenuRequested, this,
+                &DevicePalette::objectContextMenu);
         const QString label = added > 0 ? QStringLiteral("%1  (%2)").arg(category).arg(added)
                                         : category;
         addItem(list, label);
