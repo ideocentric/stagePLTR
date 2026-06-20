@@ -1,29 +1,62 @@
 {
-  "_comment": "Generation manifest for figures/objects. See spec.md for the rules. This is a starting skeleton — reconcile with the existing generate.py schema when wiring step (b).",
+  "canvas": { "width": 200, "height": 200 },
+  "_scale": "200 units = 2 m (1 unit = 10 mm). With the app's S = 10 mm/px, 1 unit -> 1 px.",
+  "style_def": ".ln{fill:none;stroke:#111;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}.lnf{fill:#fff;stroke:#111;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}",
 
-  "scale_mm_per_px": 10,
-  "render_frame_mm": 2000,
-  "layer_order": ["body", "hair", "instrument", "accessories"],
-  "mirror_layers": ["body", "hair"],
+  "layer_order": ["torso", "instrument", "arms", "head", "hair", "accessory"],
+  "mirror_layers": ["instrument", "arms"],
 
   "axes": {
-    "build": ["masc", "fem"],
-    "hair": ["short", "long", "bald"]
+    "instrument": ["guitar"],
+    "gender": ["male", "female", "nonbinary"],
+    "ethnicity": ["default", "black", "eastasian", "southasian", "latino"],
+    "handedness": ["right", "left"],
+    "style": ["metal", "punk", "rap", "pop", "symphony"]
   },
 
-  "objects": [
-    {
-      "id": "figure-guitar",
-      "name": "Guitarist",
-      "category": "People",
-      "footprint_mm": [520, 980],
-      "instrument": "guitar",
-      "vary": ["build", "hair"],
-      "handedness": ["right", "left"],
-      "parts": {
-        "instrument": "parts/instruments/guitar.svg"
-      },
-      "ports": []
-    }
-  ]
+  "layers": {
+    "torso": [
+      { "when": { "gender": "male" },   "use": "base/torso_broad.svg" },
+      { "when": { "gender": "female" }, "use": "base/torso_fem.svg" },
+      { "when": {},                     "use": "base/torso_neutral.svg" }
+    ],
+    "instrument": [
+      { "when": { "instrument": "guitar" }, "use": "instruments/guitar.svg" }
+    ],
+    "arms": [
+      { "when": { "instrument": "guitar" }, "use": "arms/arms_guitar.svg" }
+    ],
+    "head": [
+      { "when": {}, "use": "head/head_base.svg" }
+    ],
+    "hair": [
+      { "when": { "ethnicity": "black" },     "use": "hair/hair_coily.svg" },
+      { "when": { "style": "metal" },         "use": "hair/hair_long.svg" },
+      { "when": { "style": "punk" },          "use": "hair/hair_mohawk.svg" },
+      { "when": { "style": "pop" },           "use": "hair/hair_bun.svg" },
+      { "when": { "style": "symphony" },      "use": "hair/hair_bun.svg" },
+      { "when": {},                           "use": "hair/hair_short.svg" }
+    ],
+    "accessory": [
+      { "when": { "style": "rap" },  "use": "accessories/cap.svg" },
+      { "when": {},                  "use": null }
+    ]
+  },
+
+  "output": {
+    "_comment": "Used by step (b): footprint_units = [x,y,w,h] crop rect in the 200-unit frame; the output viewBox is set to it and defaultSize = [w,h] px (1 unit -> 1 px). 'builtin' selects which combos ship with the app vs. live only in loadable packs. Tune footprint rects once real art is in.",
+    "scale_mm_per_px": 10,
+    "unit_mm": 10,
+    "instruments": {
+      "guitar": {
+        "name": "Guitarist",
+        "category": "People",
+        "footprint_units": [44, 42, 112, 116]
+      }
+    },
+    "builtin": [
+      { "instrument": "guitar", "gender": "male",   "ethnicity": "default", "handedness": "right", "style": "pop" },
+      { "instrument": "guitar", "gender": "female", "ethnicity": "default", "handedness": "right", "style": "pop" }
+    ]
+  }
 }

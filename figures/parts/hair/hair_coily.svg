@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle class="lnf" cx="100" cy="60" r="17"/>
+  <circle class="ln" cx="92" cy="54" r="3"/>
+  <circle class="ln" cx="104" cy="51" r="3"/>
+  <circle class="ln" cx="110" cy="62" r="3"/>
+  <circle class="ln" cx="90" cy="66" r="3"/>
+  <circle class="ln" cx="100" cy="68" r="3"/>
+</svg>

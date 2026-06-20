@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle class="lnf" cx="114" cy="126" r="19"/>
+  <circle class="lnf" cx="103" cy="106" r="13"/>
+  <circle class="ln"  cx="112" cy="121" r="4"/>
+  <path  class="lnf" d="M96,101 L52,76 Q49,74 51,71 L53,68 Q56,67 58,69 L100,96 Z"/>
+  <path  class="lnf" d="M52,76 L44,71 Q41,69 43,66 L46,63 Q49,62 51,65 L57,73 Z"/>
+</svg>

@@ -1,122 +1,101 @@
 # Figure & Object SVG Standard (the contract)
 
-The single source of truth for how every stage-plot symbol is produced, scaled,
-named, and handed to the stagePLTR app. Authoring (3D → line art) is described in
-[PIPELINE.md](PIPELINE.md); **this file is the contract that output must obey** so
-the whole library is mutually consistent and correctly scaled.
-
-If a rule here and a habit in a tool disagree, this file wins.
-
----
-
-## 1. Coordinate & scale model
-
-Three layers, each with one job:
-
-| Layer | Unit | Set by | Rule |
-|---|---|---|---|
-| **3D render** | metres | Blender ortho camera | Fixed 2 m frame, locked 8° tilt (PIPELINE §2) |
-| **Published SVG** | **millimetres** (1 user unit = 1 mm) | Blender SVG export, calibrated | Geometry is real-world true |
-| **stagePLTR canvas** | pixels | the app | `defaultSize_px = footprint_mm / S` |
-
-- **Everything is authored in millimetres.** Calibrate the Blender exporter once
-  (render a known-length reference, measure the SVG, set exporter scale) so
-  `1 SVG unit = 1 mm`. After that, all geometry is to scale for free.
-- **`S` — the master display scale — is the only mm→pixel knob.**
-  - **`S = 10` (1 px = 1 cm).** Library-wide constant.
-  - A US-Letter page (816×1056 px @96 dpi) then reads as ≈ **8.16 m × 10.56 m** of
-    stage. A 0.5 m-wide person → 50 px; a 1 m guitar → 100 px; a 1.5 m kit → 150 px.
-  - `S` is **non-destructive**: it only sets each object's default on-canvas size.
-    Change it later → regenerate `defaultSize`; placed instances can still be
-    resized by hand. So this number is safe to revisit after the first real render.
-
-**Why this guarantees scale:** because every object's `defaultSize` is *derived*
-from its measured millimetre footprint by the same `S`, no object can drift out of
-proportion to any other — a guitarist and a grand piano are correct relative to
-each other by construction, not by eye.
+The single source of truth for how every stage-plot symbol is authored, scaled,
+named, generated, and handed to the stagePLTR app. 3D authoring is in
+[PIPELINE.md](PIPELINE.md); the 2D parts compositor is `generate.py`. **This file
+is the contract both obey.** If a rule here disagrees with a habit in a tool,
+this file wins.
 
 ---
 
-## 2. The published SVG (one per object/variant)
+## 1. Canvas, coordinates, scale
 
-What the generator emits for stagePLTR to consume.
+- **Canvas:** `viewBox="0 0 200 200"`. The figure is centred at **(100, 100)**.
+- **Real scale:** **200 units = 2 m**, i.e. **1 unit = 10 mm (1 cm)**. This matches
+  the Blender 2 m render frame (PIPELINE §2), so 2D-authored and 3D-rendered parts
+  share one scale.
+- **Facing:** the figure faces **north (−y / up)** = the direction the performer
+  faces. A small nose mark on the head encodes orientation. Author no baked
+  rotation/translation — stagePLTR rotates/positions the placed icon.
+- **stagePLTR mapping (the key identity):** the app's master display scale is
+  **`S = 10` mm/px**. With 1 unit = 10 mm and `S` = 10, **1 SVG unit → 1 px**.
+  So an object's on-canvas `defaultSize` in pixels equals its footprint in units
+  (see §6). Change `S` later → regenerate; it's non-destructive.
 
-- **Compose in the 2 m frame, then crop.** Parts (figure, hair, instrument) are
-  registered in the shared 2 m frame so hands meet the instrument; the *finished*
-  object is then **cropped to its own content bounding box**.
-- **`viewBox` = the cropped footprint, in millimetres.** e.g. a guitarist might be
-  `viewBox="0 0 520 980"` (520 mm × 980 mm). **Non-square is expected and fine**
-  (stagePLTR supports non-square `defaultSize`). Do **not** force a square frame.
-- **No `width`/`height` attributes** (or set them equal to the viewBox extents) —
-  the app scales the viewBox into its pixel box.
-- **Stroke:** single black contour, `#000000`, one standard weight. Transparent
-  background (no white fill rectangle). Dark line-art reads on stagePLTR's light
-  page; the palette is also light.
-- **Orientation (overhead):** figure faces **−Y** = *downstage / toward the
-  audience*. "Up" in the SVG (−Y in render terms, top of the viewBox) = *upstage /
-  away from the audience*. Every object shares this so a stage reads coherently.
-- **Pose handedness:** author **right-handed only**. Left-handed is a 2D mirror
-  (§4), never a separate render.
+## 2. Line convention (the "CAD look")
+Strokes come from two CSS classes injected into every output by the generator —
+**parts carry no inline stroke styling**, so weight lives in one place
+(`style_def` in `manifest.json`):
+- `.ln`  — `fill:none` (open line work)
+- `.lnf` — `fill:#fff` (closed shapes that must occlude layers beneath them)
+- stroke `#111`, width `1.6`, round joins/caps.
 
----
+Verified: Qt's `QSvgRenderer` (stagePLTR's icon path) honours these class
+selectors, so generated SVGs drop in with no flattening.
 
-## 3. Naming (deterministic)
+## 3. Layers (z, bottom → top)
+`layer_order` in the manifest: `torso → instrument → arms → head → hair →
+accessory`. Each becomes `<g id="<layer>">` in the output (toggle/recolour by id).
+Use `.lnf` for shapes that must hide what's beneath (head over arms, hair over
+head); `.ln` for detail strokes.
 
-`<kind>_<subject>_<variant...>.svg`, lowercase, hyphen-free tokens.
+## 4. Registration / anchors (200-unit frame)
+- Head centre ≈ (100, 61); shoulder line ≈ y 92; waist ≈ y 140.
+- Instruments authored **right-handed** as canonical, placed relative to the torso.
+- Arms authored to meet the canonical instrument's grip points.
 
-- Figures: `figure_<instrument>_<build>_<hair>[_left].svg`
-  e.g. `figure_guitar_masc_short.svg`, `figure_keys_fem_long.svg`,
-  `figure_guitar_masc_short_left.svg` (mirrored).
-- Separable parts (if rendered apart for layering): `hair_<style>.svg`,
-  `body_<build>_<pose>.svg`.
-- Instruments/objects: `object_<name>.svg` e.g. `object_grand-piano.svg`.
+## 5. Handedness = mirror, never a second drawing
+Left-handed variants horizontally mirror the `mirror_layers` (`instrument`,
+`arms`) about centre: `transform="translate(200,0) scale(-1,1)"`.
 
-Names are generated from `manifest.json`, not typed by hand, so they stay
-collision-free and match the contact sheet.
+## 6. Footprint & size (proper scale, zero-dependency)
+Rather than computing an SVG bounding box, each object **declares its footprint**
+as a crop rectangle in units, under `output.instruments.<instrument>` in the
+manifest: `"footprint_units": [x, y, w, h]`.
 
----
+The generator (step b) then, per object:
+- sets the output **`viewBox` to that rect** (tight to the figure, not the whole
+  2 m frame), and
+- emits `defaultSize = [w, h]` px (1 unit → 1 px, §1).
 
-## 4. Variation matrix (minimise renders)
+This keeps every object proportional by construction and needs no geometry engine.
 
-Render count = **instruments × builds × hairstyles**. Nothing else multiplies:
+## 7. Overhead visibility (where to spend art effort)
+Top-down you see hair, shoulders/torso, arms, hands, instrument, accessories — not
+faces or skin tone. So:
+- **Ethnicity** → hair shape/texture + headwear (not colour). Hair-part overrides.
+- **Gender** → torso proportion + hair + accessories.
+- **Style/genre** → hair + accessories (later: stance/props).
+Invest in a rich hair + accessory library; bodies/instruments are a small set.
 
-- **Handedness** → 2D mirror at compose time
-  (`transform="translate(W,0) scale(-1,1)"`), zero extra renders.
-- **Ethnicity** → realised through hair variants (+ optional subtle skull morphs),
-  not a separate render axis (PIPELINE §6, §8).
-- **Build/gender** → re-apply the MakeHuman morph / Blender shape key, re-render.
+## 8. Naming (deterministic)
+- Parts: `parts/<layer>/<descriptor>.svg` (e.g. `hair/hair_mohawk.svg`).
+- Outputs: `<instrument>_<gender>_<ethnicity>_<handedness>_<style>.svg`.
+Generated from the manifest, never hand-typed.
 
----
+## 9. Manifest rule resolution
+Per layer, the generator uses the **first** rule whose `when` is a subset of the
+current traits; `{}` matches anything (default); `"use": null` draws nothing.
+Order specific → general.
 
-## 5. Handing an object to stagePLTR
+## 10. Delivery to stagePLTR: curated built-ins + loadable packs
+The full matrix is large (e.g. one instrument × 3 genders × 5 ethnicities × 2
+hands × 5 genres = 150). It is **not** all shipped as flat palette entries:
 
-Each published object maps to one `catalog.json` entry (or is imported via the
-app's object editor):
+- **Curated built-ins:** a small, representative set is selected (a `builtin: true`
+  flag/list in the manifest) and emitted into the app's `assets/plot/` + a
+  `catalog.json` fragment.
+- **Object packs:** the *whole* matrix (or themed subsets) is emitted as
+  **importable packs** — a directory of SVGs + an `objects.json` (same shape the
+  app's user library uses). stagePLTR's **"Import Object Pack…"** loads a pack's
+  objects into the user library, so users populate their palette with the figures
+  they actually want. (Same machinery as Phase 3's per-file embed/import.)
 
-| Catalog field | From the figure pipeline |
-|---|---|
-| `id` | the deterministic file stem (e.g. `figure-guitar-masc-short`) |
-| `name` | human label (e.g. "Guitarist") |
-| `category` | **People** for musicians, **DJ** for DJ gear, else the object's group |
-| `icon` | the published SVG (bytes; SVG preferred per app convention) |
-| `defaultSize` | `[ viewBox_w / S , viewBox_h / S ]` — non-square allowed |
-| `ports` | usually **none** for a person (it's a position marker); add a vocal mic / DI where it makes sense |
-| `builtin` | `true` if shipped in the app; user-made copies are `false` |
-
-`generate.py` (step **b**) will emit both the SVGs and a `catalog.json` fragment
-with `defaultSize` already computed from each footprint and `S`, so figures drop
-straight into the app at the correct, mutually-consistent scale.
-
----
-
-## 6. Stable decisions (do not drift)
-
-- `S = 10` mm/px (master display scale).
-- Render frame: 2 m, ortho, 8° tilt (PIPELINE §2).
-- SVG units: millimetres; cropped to content; non-square viewBox; black contour,
-  transparent background.
-- Orientation: faces −Y (downstage); right-handed source; mirror for left.
-- Naming + `catalog.json` generated from `manifest.json`, never hand-edited.
-
-Revisit `S` (only) after the first real test render, once a figure's on-page size
-can be eyeballed against the existing instrument symbols.
+## 11. Stable decisions (do not drift)
+- 200 units = 2 m (1 unit = 1 cm); `S` = 10 mm/px → 1 unit = 1 px.
+- Faces north; right-handed source; mirror for left.
+- `.ln`/`.lnf` classes, `#111`, width 1.6, transparent background.
+- Footprint declared per object (`footprint_units`); output viewBox = that rect;
+  `defaultSize` = its `[w, h]`.
+- Naming + catalog/pack output generated from `manifest.json`, never hand-edited.
+- Curated built-ins ship with the app; the full matrix ships as loadable packs.
