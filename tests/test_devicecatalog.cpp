@@ -20,6 +20,7 @@
 #include "deviceicon.h"
 #include "devicetype.h"
 
+#include <QDir>
 #include <QFile>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -42,6 +43,7 @@ class TestDeviceCatalog : public QObject
 private slots:
     void loadsRealCatalog();
     void userLibraryRoundTrip();
+    void importsObjectPack();
     void embeddedObjectRoundTrip();
     void categoriesRemapped();
     void orderedCategoriesMatchDeclaredOrder();
@@ -104,6 +106,62 @@ void TestDeviceCatalog::userLibraryRoundTrip()
 
     QVERIFY(reloaded.removeUserObject(QStringLiteral("user-thing")));
     QVERIFY(reloaded.find(QStringLiteral("user-thing")) == nullptr);
+}
+
+void TestDeviceCatalog::importsObjectPack()
+{
+    // Build a pack the way figures/generate.py --emit packs does: an objects.json
+    // (user-library shape) plus sibling icon files referenced by filename.
+    QTemporaryDir pack;
+    QVERIFY(pack.isValid());
+    QVERIFY(QFile::copy(QStringLiteral(STAGEPLT_ASSETS_DIR "/mic-straight-overhead.svg"),
+                        QDir(pack.path()).filePath(QStringLiteral("fig.svg"))));
+    {
+        const QByteArray objects = R"({
+            "version": 1,
+            "name": "Test Pack",
+            "devices": [
+                {"id": "fig-x", "name": "Figure X", "category": "People",
+                 "icon": "fig.svg", "defaultSize": [112, 116], "ports": []},
+                {"id": "fig-missing", "name": "Missing Icon", "category": "People",
+                 "icon": "absent.svg", "defaultSize": [40, 40], "ports": []}
+            ]
+        })";
+        QFile f(QDir(pack.path()).filePath(QStringLiteral("objects.json")));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(objects);
+    }
+
+    QTemporaryDir lib;
+    QVERIFY(lib.isValid());
+    DeviceCatalog catalog;
+    QVERIFY(catalog.loadFromJson(realCatalogJson(), QStringLiteral(STAGEPLT_ASSETS_DIR)));
+    catalog.setUserLibraryPath(lib.path());
+
+    QStringList added;
+    QString error;
+    const int count = catalog.importPack(
+        QDir(pack.path()).filePath(QStringLiteral("objects.json")), &added, &error);
+    QCOMPARE(count, 1);  // the entry with the missing icon is skipped
+    QCOMPARE(added, QStringList{QStringLiteral("Figure X")});
+
+    const DeviceType *fig = catalog.find(QStringLiteral("fig-x"));
+    QVERIFY(fig != nullptr);
+    QVERIFY(!fig->builtin);
+    QVERIFY(fig->icon.isValid());
+    const QSizeF expected(112, 116);
+    QCOMPARE(fig->defaultSize, expected);
+    QVERIFY(catalog.find(QStringLiteral("fig-missing")) == nullptr);
+
+    // It persisted to the user library: a fresh catalog reloads it from disk.
+    DeviceCatalog reloaded;
+    QVERIFY(reloaded.loadFromJson(realCatalogJson(), QStringLiteral(STAGEPLT_ASSETS_DIR)));
+    reloaded.setUserLibraryPath(lib.path());
+    QVERIFY(reloaded.loadUserLibrary());
+    QVERIFY(reloaded.isUserObject(QStringLiteral("fig-x")));
+
+    // A non-existent pack is a hard error, not a silent zero.
+    QCOMPARE(catalog.importPack(QStringLiteral("/no/such/objects.json")), -1);
 }
 
 void TestDeviceCatalog::embeddedObjectRoundTrip()

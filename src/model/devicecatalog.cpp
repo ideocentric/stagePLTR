@@ -20,6 +20,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -360,4 +361,45 @@ bool DeviceCatalog::removeUserObject(const QString &id, QString *error)
     QFile::remove(QDir(m_userDir).filePath(iconFileName(m_devices.at(index))));
     m_devices.removeAt(index);
     return saveUserLibrary(error);
+}
+
+int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *addedNames,
+                              QString *error)
+{
+    QFile file(objectsJsonPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (error)
+            *error = QStringLiteral("Cannot read object pack: %1").arg(objectsJsonPath);
+        return -1;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (doc.isNull() || !doc.isObject()) {
+        if (error)
+            *error = QStringLiteral("Not a valid object pack: %1").arg(parseError.errorString());
+        return -1;
+    }
+    const QJsonArray devices = doc.object().value(QStringLiteral("devices")).toArray();
+    if (devices.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("This file contains no objects to import");
+        return -1;
+    }
+
+    // Icons live alongside the pack's objects.json; resolve them against its dir.
+    const QString packDir = QFileInfo(objectsJsonPath).absolutePath();
+    int imported = 0;
+    for (const QJsonValue &value : devices) {
+        DeviceType type;
+        if (!parseDeviceType(value.toObject(), packDir, /*builtin=*/false, &type))
+            continue;  // missing id/icon name
+        if (!type.icon.isValid())
+            continue;  // icon file absent on disk — skip rather than write an empty one
+        if (!addUserObject(type))  // writes the icon + persists objects.json
+            continue;
+        ++imported;
+        if (addedNames)
+            addedNames->append(type.name);
+    }
+    return imported;
 }

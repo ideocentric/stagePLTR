@@ -67,6 +67,14 @@ public:
     bool addUserObject(const DeviceType &type, QString *error = nullptr);
     bool removeUserObject(const QString &id, QString *error = nullptr);
 
+    // Import an object pack — an objects.json (same shape as the user library)
+    // with sibling icon files — adding each object to the user library (icons
+    // copied in, existing same-id user objects replaced). Returns the number
+    // imported, or -1 on a read/parse error (*error set). addedNames, if given,
+    // collects the display names of the objects that were imported.
+    int importPack(const QString &objectsJsonPath, QStringList *addedNames = nullptr,
+                   QString *error = nullptr);
+
     // Portability: a custom object embedded in a .splot (icon as base64 bytes).
     static QJsonObject toEmbeddedJson(const DeviceType &type);
     static DeviceType fromEmbeddedJson(const QJsonObject &obj);

@@ -156,6 +156,10 @@ void MainWindow::createActions()
     connect(openAct, &QAction::triggered, this, &MainWindow::openPlot);
     addAction(openAct);
 
+    auto *importPackAct = new QAction(tr("Import Object &Pack…"), this);
+    connect(importPackAct, &QAction::triggered, this, &MainWindow::importObjectPack);
+    addAction(importPackAct);
+
     auto *saveAct = new QAction(tr("&Save"), this);
     saveAct->setShortcut(QKeySequence::Save);
     connect(saveAct, &QAction::triggered, this, &MainWindow::savePlot);
@@ -263,6 +267,7 @@ void MainWindow::createMenus()
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(byText(tr("&New")));
     fileMenu->addAction(byText(tr("&Open…")));
+    fileMenu->addAction(byText(tr("Import Object &Pack…")));
     fileMenu->addSeparator();
     fileMenu->addAction(byText(tr("&Save")));
     fileMenu->addAction(byText(tr("Save &As…")));
@@ -739,6 +744,34 @@ bool MainWindow::loadFromFile(const QString &path)
 
     offerToImportObjects(newObjectIds);
     return true;
+}
+
+void MainWindow::importObjectPack()
+{
+    const QString path = QFileDialog::getOpenFileName(
+        this, tr("Import Object Pack"), QString(),
+        tr("Object Pack (objects.json *.json);;All Files (*)"));
+    if (path.isEmpty())
+        return;
+
+    QStringList added;
+    QString error;
+    const int count = m_catalog.importPack(path, &added, &error);
+    if (count < 0) {
+        QMessageBox::warning(this, tr("Import Object Pack"), error);
+        return;
+    }
+    if (count == 0) {
+        QMessageBox::information(
+            this, tr("Import Object Pack"),
+            tr("No objects could be imported from this pack (missing or "
+               "unreadable icon files?)."));
+        return;
+    }
+
+    m_palette->populate(m_catalog);  // surface the newly imported objects
+    statusBar()->showMessage(tr("Imported %n object(s) into your library", "", count),
+                             3000);
 }
 
 void MainWindow::offerToImportObjects(const QStringList &ids)
