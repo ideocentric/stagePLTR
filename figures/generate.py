@@ -13,6 +13,10 @@ Usage:
   python3 generate.py --filter style=punk --filter gender=female
   python3 generate.py --limit 24           # cap the number of files (preview)
   python3 generate.py --no-index           # skip out/index.html
+  python3 generate.py --emit builtins      # curated built-ins -> dist/builtins/
+  python3 generate.py --emit packs         # full matrix as one importable pack
+  python3 generate.py --emit packs --pack-by style   # one pack per genre
+  python3 generate.py --emit all --pack-by style     # built-ins + per-genre packs
 
 Filenames are deterministic: <instrument>_<gender>_<ethnicity>_<hand>_<style>.svg
 Swap manifest.json to JSON-with-comments or YAML at will; only load_manifest()
@@ -75,14 +79,35 @@ def load_part_children(rel_path: str) -> list[ET.Element]:
     return children
 
 
+def crop_for(traits: dict, manifest: dict) -> tuple[int, int, int, int]:
+    """The object's footprint rect (x, y, w, h) in the 200-unit frame.
+
+    Per spec §6 each object declares `output.instruments.<instrument>.
+    footprint_units`; the output viewBox is set to it (tight crop) and
+    `defaultSize` = its [w, h] (1 unit -> 1 px). Falls back to the full canvas.
+    Left-handed mirrors the figure about the canvas centre, so the crop's x is
+    mirrored too — keeps an asymmetric footprint aligned to its content.
+    """
+    cw = manifest["canvas"]["width"]
+    ch = manifest["canvas"]["height"]
+    fp = (manifest.get("output", {}).get("instruments", {})
+          .get(traits.get("instrument"), {}).get("footprint_units"))
+    if not (isinstance(fp, list) and len(fp) == 4):
+        return (0, 0, cw, ch)
+    x, y, w, h = (int(v) for v in fp)
+    if traits.get("handedness") == "left":
+        x = cw - x - w
+    return (x, y, w, h)
+
+
 def compose(traits: dict, manifest: dict) -> ET.Element:
-    w = manifest["canvas"]["width"]
-    h = manifest["canvas"]["height"]
+    cw = manifest["canvas"]["width"]
     mirror_layers = set(manifest.get("mirror_layers", []))
     flip = traits.get("handedness") == "left"
 
+    x, y, w, h = crop_for(traits, manifest)
     svg = ET.Element(f"{{{SVG_NS}}}svg", {
-        "viewBox": f"0 0 {w} {h}",
+        "viewBox": f"{x} {y} {w} {h}",
         "width": str(w),
         "height": str(h),
     })
@@ -99,8 +124,10 @@ def compose(traits: dict, manifest: dict) -> ET.Element:
         if not part:
             continue
         g = ET.SubElement(svg, f"{{{SVG_NS}}}g", {"id": layer})
+        # Mirror about the full-canvas centre (not the crop) so left-handed
+        # parts still register to the right-handed source geometry.
         if flip and layer in mirror_layers:
-            g.set("transform", f"translate({w},0) scale(-1,1)")
+            g.set("transform", f"translate({cw},0) scale(-1,1)")
         for child in load_part_children(part):
             g.append(deepcopy(child))
     return svg
@@ -154,6 +181,140 @@ def build_index(files: list[str], dest: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Catalog / pack emission (step b): footprint -> defaultSize, app-shaped JSON
+# --------------------------------------------------------------------------- #
+# Display strings for traits that read better than their raw axis values.
+_ETHNICITY_LABEL = {
+    "default": None, "black": "Black", "eastasian": "East Asian",
+    "southasian": "South Asian", "latino": "Latino",
+}
+
+
+def _instrument_meta(combo: dict, manifest: dict) -> dict:
+    return (manifest.get("output", {}).get("instruments", {})
+            .get(combo["instrument"], {}))
+
+
+def device_id(combo: dict) -> str:
+    """Stable, namespaced id (distinct from hand-authored built-in ids)."""
+    return ("fig-" + filename(combo)[:-4]).replace("_", "-")
+
+
+def device_name(combo: dict, manifest: dict) -> str:
+    base = _instrument_meta(combo, manifest).get("name") or combo["instrument"].title()
+    bits = [combo["gender"].title()]
+    eth = _ETHNICITY_LABEL.get(combo["ethnicity"], combo["ethnicity"].title())
+    if eth:
+        bits.append(eth)
+    bits.append(combo["style"].title())
+    if combo["handedness"] == "left":
+        bits.append("Left-handed")
+    return f"{base} — {', '.join(bits)}"
+
+
+def device_entry(combo: dict, manifest: dict, icon: str) -> dict:
+    """One catalog/pack device record, shaped for the app's parseDeviceType."""
+    _, _, w, h = crop_for(combo, manifest)
+    return {
+        "id": device_id(combo),
+        "name": device_name(combo, manifest),
+        "category": _instrument_meta(combo, manifest).get("category", "Other"),
+        "icon": icon,
+        "defaultSize": [w, h],
+        "ports": [],  # figures are physical placements, not signal sources
+    }
+
+
+def _write_svgs(combos: list[dict], manifest: dict, dest: Path) -> list[str]:
+    dest.mkdir(parents=True, exist_ok=True)
+    names = []
+    for combo in combos:
+        try:
+            svg = compose(combo, manifest)
+        except FileNotFoundError as e:
+            log.error("skip %s: %s", filename(combo), e)
+            continue
+        name = filename(combo)
+        write_svg(svg, dest / name)
+        names.append(name)
+    return names
+
+
+def emit_builtins(manifest: dict, dist_dir: Path) -> int:
+    """Curated built-ins: SVGs + a drop-in `catalog.json` fragment.
+
+    `output.builtin` lists the combos that ship with the app. The fragment's
+    `devices` merge into assets/plot/catalog.json and the SVGs copy alongside
+    it (flat `icon` filenames -> no path edits). Categories listed for ordering.
+    """
+    combos = manifest.get("output", {}).get("builtin", [])
+    if not combos:
+        log.warning("no output.builtin combos in manifest; nothing to emit")
+        return 0
+    dest = dist_dir / "builtins"
+    names = _write_svgs(combos, manifest, dest)
+    devices = sorted((device_entry(c, manifest, filename(c)) for c in combos),
+                     key=lambda d: d["id"])
+    categories = list(dict.fromkeys(d["category"] for d in devices))
+    fragment = {
+        "version": 1,
+        "_comment": ("Curated figure built-ins (generated by figures/generate.py). "
+                     "Merge 'devices' into assets/plot/catalog.json and copy these "
+                     "SVGs into assets/plot/ (then add them to resources.qrc)."),
+        "categories": categories,
+        "devices": devices,
+    }
+    (dest / "catalog.json").write_text(
+        json.dumps(fragment, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    log.info("emitted %d built-in(s) + catalog.json to %s", len(names), dest)
+    return len(names)
+
+
+def _slug(value: str) -> str:
+    return "".join(c if c.isalnum() else "-" for c in value.lower()).strip("-")
+
+
+def emit_packs(manifest: dict, dist_dir: Path, combos: list[dict],
+               pack_by: str | None) -> int:
+    """Object packs: per group, a dir of SVGs + `objects.json` (library shape).
+
+    Each pack is `{version, name, devices:[...]}` with flat `icon` filenames —
+    the same shape stagePLTR's user library writes, so "Import Object Pack…"
+    loads it directly. `pack_by` splits the matrix along one axis (e.g. style);
+    omitted -> a single pack of the whole (filtered) matrix.
+    """
+    groups: dict[str, list[dict]] = {}
+    for combo in combos:
+        key = combo[pack_by] if pack_by else "all"
+        groups.setdefault(key, []).append(combo)
+
+    instr_names = sorted({_instrument_meta(c, manifest).get("name")
+                          or c["instrument"].title() for c in combos})
+    label = ", ".join(instr_names) if instr_names else "Figures"
+
+    total = 0
+    for key, group in sorted(groups.items()):
+        pack_name = f"{label} — {key.title()}" if pack_by else f"{label} (all)"
+        dest = dist_dir / "packs" / (f"{_slug(label)}-{_slug(key)}" if pack_by
+                                     else f"{_slug(label)}-all")
+        names = _write_svgs(group, manifest, dest)
+        devices = sorted((device_entry(c, manifest, filename(c)) for c in group),
+                         key=lambda d: d["id"])
+        objects = {
+            "version": 1,
+            "name": pack_name,
+            "_comment": "stagePLTR object pack — Import Object Pack… loads these "
+                        "into your user library.",
+            "devices": devices,
+        }
+        (dest / "objects.json").write_text(
+            json.dumps(objects, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        log.info("emitted pack '%s' (%d object(s)) to %s", pack_name, len(names), dest)
+        total += len(names)
+    return total
+
+
+# --------------------------------------------------------------------------- #
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Generate overhead line-art musician figures.")
     ap.add_argument("--manifest", default=str(ROOT / "manifest.json"))
@@ -163,6 +324,15 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=int, default=0, help="cap number of files (0 = no cap)")
     ap.add_argument("--dry-run", action="store_true", help="list combos, write nothing")
     ap.add_argument("--no-index", action="store_true", help="do not write out/index.html")
+    ap.add_argument("--emit", choices=["builtins", "packs", "all"],
+                    help="emit app artifacts instead of the out/ preview: a "
+                         "catalog.json fragment for curated built-ins, and/or "
+                         "Import-Object-Pack object packs")
+    ap.add_argument("--dist", default=str(ROOT / "dist"),
+                    help="base dir for --emit artifacts (default figures/dist)")
+    ap.add_argument("--pack-by", metavar="AXIS",
+                    help="split packs along an axis, e.g. --pack-by style "
+                         "(default: one pack for the whole matrix)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -191,6 +361,20 @@ def main(argv=None) -> int:
     if args.dry_run:
         for c in combos:
             log.info("  %s", filename(c))
+        return 0
+
+    if args.emit:
+        if args.pack_by and args.pack_by not in manifest["axes"]:
+            log.error("--pack-by %r is not an axis (choose from: %s)",
+                      args.pack_by, ", ".join(manifest["axes"]))
+            return 2
+        dist_dir = Path(args.dist)
+        n = 0
+        if args.emit in ("builtins", "all"):
+            n += emit_builtins(manifest, dist_dir)
+        if args.emit in ("packs", "all"):
+            n += emit_packs(manifest, dist_dir, combos, args.pack_by)
+        log.info("emit complete: %d SVG(s) under %s", n, dist_dir)
         return 0
 
     out_dir.mkdir(parents=True, exist_ok=True)
