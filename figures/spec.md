@@ -87,9 +87,13 @@ hands × 5 genres = 150). It is **not** all shipped as flat palette entries:
   `catalog.json` fragment.
 - **Object packs:** the *whole* matrix (or themed subsets) is emitted as
   **importable packs** — a directory of SVGs + an `objects.json` (same shape the
-  app's user library uses). stagePLTR's **"Import Object Pack…"** loads a pack's
-  objects into the user library, so users populate their palette with the figures
-  they actually want. (Same machinery as Phase 3's per-file embed/import.)
+  app's user library uses, plus a top-level pack `name` and a stable `id`).
+  The `id` is a **GUID** (the generator derives it `uuid5`-style from the pack
+  slug, so regenerating keeps the same id); stagePLTR tracks packs by this id so
+  two packs can share a display name without merging, and removal is exact.
+  **"Import Object Pack…"** loads a pack's objects into the user library (forcing
+  a name if the file omits one); **"Remove Object Pack…"** removes one by id.
+  (Same machinery as Phase 3's per-file embed/import.)
 
 ## 11. Stable decisions (do not drift)
 - 200 units = 2 m (1 unit = 1 cm); `S` = 10 mm/px → 1 unit = 1 px.

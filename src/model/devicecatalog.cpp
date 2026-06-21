@@ -47,7 +47,10 @@ bool parseDeviceType(const QJsonObject &obj, const QString &iconBase, bool built
     out->category = obj.value(QStringLiteral("category")).toString(QStringLiteral("Other"));
     out->icon = DeviceIcon::fromPath(iconBase + QLatin1Char('/') + icon);
     out->builtin = builtin;
-    out->pack = obj.value(QStringLiteral("pack")).toString();
+    out->packId = obj.value(QStringLiteral("packId")).toString();
+    // packName, with a fallback to the pre-GUID "pack" field for old libraries.
+    out->packName = obj.value(QStringLiteral("packName"))
+                        .toString(obj.value(QStringLiteral("pack")).toString());
 
     const QJsonArray size = obj.value(QStringLiteral("defaultSize")).toArray();
     if (size.size() == 2)
@@ -57,6 +60,18 @@ bool parseDeviceType(const QJsonObject &obj, const QString &iconBase, bool built
     for (const QJsonValue &portValue : portArray)
         out->ports.append(Port::fromJson(portValue.toObject()));
     return true;
+}
+
+// Stable grouping key for a pack: the GUID when present, else the display name,
+// else empty (ungrouped). Prefixed so an id and a name can never collide. Two
+// objects belong to the same pack iff their keys are equal.
+QString packKey(const QString &packId, const QString &packName)
+{
+    if (!packId.isEmpty())
+        return QStringLiteral("i:") + packId;
+    if (!packName.isEmpty())
+        return QStringLiteral("n:") + packName;
+    return QString();
 }
 
 // File name for a user object's icon within the library directory.
@@ -80,8 +95,10 @@ QJsonObject deviceTypeToJson(const DeviceType &type)
     for (const Port &port : type.ports)
         ports.append(port.toJson());
     obj[QStringLiteral("ports")] = ports;
-    if (!type.pack.isEmpty())
-        obj[QStringLiteral("pack")] = type.pack;
+    if (!type.packId.isEmpty())
+        obj[QStringLiteral("packId")] = type.packId;
+    if (!type.packName.isEmpty())
+        obj[QStringLiteral("packName")] = type.packName;
     return obj;
 }
 
@@ -307,8 +324,10 @@ QJsonObject DeviceCatalog::toEmbeddedJson(const DeviceType &type)
     for (const Port &port : type.ports)
         ports.append(port.toJson());
     obj[QStringLiteral("ports")] = ports;
-    if (!type.pack.isEmpty())
-        obj[QStringLiteral("pack")] = type.pack;
+    if (!type.packId.isEmpty())
+        obj[QStringLiteral("packId")] = type.packId;
+    if (!type.packName.isEmpty())
+        obj[QStringLiteral("packName")] = type.packName;
     // Icon travels with the file as base64 bytes so the plot opens anywhere.
     obj[QStringLiteral("iconData")] = QString::fromLatin1(type.icon.data().toBase64());
     obj[QStringLiteral("iconFormat")] = type.icon.format();
@@ -330,7 +349,9 @@ DeviceType DeviceCatalog::fromEmbeddedJson(const QJsonObject &obj)
     for (const QJsonValue &portValue : ports)
         type.ports.append(Port::fromJson(portValue.toObject()));
 
-    type.pack = obj.value(QStringLiteral("pack")).toString();
+    type.packId = obj.value(QStringLiteral("packId")).toString();
+    type.packName = obj.value(QStringLiteral("packName"))
+                        .toString(obj.value(QStringLiteral("pack")).toString());
     const QByteArray data =
         QByteArray::fromBase64(obj.value(QStringLiteral("iconData")).toString().toLatin1());
     type.icon = DeviceIcon(data, obj.value(QStringLiteral("iconFormat")).toString());
@@ -369,7 +390,40 @@ bool DeviceCatalog::removeUserObject(const QString &id, QString *error)
     return saveUserLibrary(error);
 }
 
-int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *addedNames,
+bool DeviceCatalog::readPackHeader(const QString &objectsJsonPath, QString *id,
+                                  QString *name, int *count, QString *error)
+{
+    QFile file(objectsJsonPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (error)
+            *error = QStringLiteral("Cannot read object pack: %1").arg(objectsJsonPath);
+        return false;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (doc.isNull() || !doc.isObject()) {
+        if (error)
+            *error = QStringLiteral("Not a valid object pack: %1").arg(parseError.errorString());
+        return false;
+    }
+    const QJsonObject root = doc.object();
+    const QJsonArray devices = root.value(QStringLiteral("devices")).toArray();
+    if (devices.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("This file contains no objects to import");
+        return false;
+    }
+    if (id)
+        *id = root.value(QStringLiteral("id")).toString();
+    if (name)
+        *name = root.value(QStringLiteral("name")).toString();
+    if (count)
+        *count = devices.size();
+    return true;
+}
+
+int DeviceCatalog::importPack(const QString &objectsJsonPath, const QString &packId,
+                              const QString &packName, QStringList *addedNames,
                               QString *error)
 {
     QFile file(objectsJsonPath);
@@ -378,13 +432,7 @@ int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *added
             *error = QStringLiteral("Cannot read object pack: %1").arg(objectsJsonPath);
         return -1;
     }
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (doc.isNull() || !doc.isObject()) {
-        if (error)
-            *error = QStringLiteral("Not a valid object pack: %1").arg(parseError.errorString());
-        return -1;
-    }
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
     const QJsonArray devices = doc.object().value(QStringLiteral("devices")).toArray();
     if (devices.isEmpty()) {
         if (error)
@@ -392,13 +440,10 @@ int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *added
         return -1;
     }
 
-    // Tag every imported object with the pack's name so it can be removed as a
-    // unit later. Fall back to the directory name when the pack is unnamed.
+    // Icons live alongside the pack's objects.json; resolve them against its dir.
+    // The caller supplies the resolved identity (GUID + display name) so it can
+    // mint one / prompt for a name when the file omits them.
     const QString packDir = QFileInfo(objectsJsonPath).absolutePath();
-    QString packName = doc.object().value(QStringLiteral("name")).toString();
-    if (packName.isEmpty())
-        packName = QFileInfo(packDir).fileName();
-
     int imported = 0;
     for (const QJsonValue &value : devices) {
         DeviceType type;
@@ -406,7 +451,8 @@ int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *added
             continue;  // missing id/icon name
         if (!type.icon.isValid())
             continue;  // icon file absent on disk — skip rather than write an empty one
-        type.pack = packName;
+        type.packId = packId;
+        type.packName = packName;
         if (!addUserObject(type))  // writes the icon + persists objects.json
             continue;
         ++imported;
@@ -418,33 +464,36 @@ int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *added
 
 QList<DeviceCatalog::PackInfo> DeviceCatalog::importedPacks() const
 {
-    // Group user objects by pack name, preserving first-seen order. Objects with
-    // no pack tag (older imports, hand-made objects) collect under one entry with
-    // an empty name so callers can offer an "Ungrouped" bucket.
+    // Group user objects by pack key (GUID, else name), preserving first-seen
+    // order. Objects with no pack tag (older imports, hand-made objects) collect
+    // under one entry with empty id+name so callers can offer an "Ungrouped" bucket.
     QList<PackInfo> packs;
     for (const DeviceType &t : m_devices) {
         if (t.builtin)
             continue;
+        const QString key = packKey(t.packId, t.packName);
         bool found = false;
         for (PackInfo &p : packs) {
-            if (p.name == t.pack) {
+            if (packKey(p.id, p.name) == key) {
                 ++p.count;
                 found = true;
                 break;
             }
         }
         if (!found)
-            packs.append({t.pack, 1});
+            packs.append({t.packId, t.packName, 1});
     }
     return packs;
 }
 
-int DeviceCatalog::removePack(const QString &pack, QString *error)
+int DeviceCatalog::removePack(const QString &packId, const QString &packName, QString *error)
 {
-    // Collect matching user objects first; deleting while iterating is awkward.
+    // Match by the same key importedPacks() groups on, so removing the chosen
+    // entry takes exactly its objects (empty id+name = the ungrouped bucket).
+    const QString target = packKey(packId, packName);
     QStringList ids;
     for (const DeviceType &t : m_devices)
-        if (!t.builtin && t.pack == pack)
+        if (!t.builtin && packKey(t.packId, t.packName) == target)
             ids.append(t.id);
     if (ids.isEmpty()) {
         if (error)

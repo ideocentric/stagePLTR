@@ -92,6 +92,7 @@ private:
     void openObjectEditor(const DeviceType &seed);
     QString makeUniqueObjectId(const QString &base) const;
     void offerToImportObjects(const QStringList &ids);
+    QString defaultPackName() const;  // a unique "Untitled N" for an unnamed pack
 
     bool maybeSave();                       // prompt if modified; false to cancel
     bool saveToFile(const QString &path);

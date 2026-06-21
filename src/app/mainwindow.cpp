@@ -42,6 +42,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QHash>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -59,9 +60,11 @@
 #include <QStandardPaths>
 #include <QShowEvent>
 #include <QSignalBlocker>
+#include <QLineEdit>
 #include <QStatusBar>
 #include <QTableView>
 #include <QUndoStack>
+#include <QUuid>
 
 namespace {
 const QString kFileFilter = QStringLiteral("stagePLTR Plot (*.splot)");
@@ -760,9 +763,31 @@ void MainWindow::importObjectPack()
     if (path.isEmpty())
         return;
 
+    QString packId, packName, error;
+    if (!m_catalog.readPackHeader(path, &packId, &packName, nullptr, &error)) {
+        QMessageBox::warning(this, tr("Import Object Pack"), error);
+        return;
+    }
+
+    // Force a display name when the pack doesn't carry one — default to a unique
+    // "Untitled N" so unnamed imports never collide on a blank name.
+    if (packName.isEmpty()) {
+        bool ok = false;
+        packName = QInputDialog::getText(
+                       this, tr("Name This Pack"),
+                       tr("This pack has no name. Name it for your library:"),
+                       QLineEdit::Normal, defaultPackName(), &ok)
+                       .trimmed();
+        if (!ok || packName.isEmpty())
+            return;  // cancelled — abort the import
+    }
+    // Mint a stable identity when the file omits one (hand-authored packs), so
+    // packs are tracked by GUID and same-named packs never merge.
+    if (packId.isEmpty())
+        packId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+
     QStringList added;
-    QString error;
-    const int count = m_catalog.importPack(path, &added, &error);
+    const int count = m_catalog.importPack(path, packId, packName, &added, &error);
     if (count < 0) {
         QMessageBox::warning(this, tr("Import Object Pack"), error);
         return;
@@ -776,8 +801,20 @@ void MainWindow::importObjectPack()
     }
 
     m_palette->populate(m_catalog);  // surface the newly imported objects
-    statusBar()->showMessage(tr("Imported %n object(s) into your library", "", count),
-                             3000);
+    statusBar()->showMessage(
+        tr("Imported %n object(s) into \"%1\"", "", count).arg(packName), 3000);
+}
+
+QString MainWindow::defaultPackName() const
+{
+    QSet<QString> used;
+    for (const DeviceCatalog::PackInfo &p : m_catalog.importedPacks())
+        used.insert(p.name);
+    for (int n = 1; ; ++n) {
+        const QString candidate = tr("Untitled %1").arg(n);
+        if (!used.contains(candidate))
+            return candidate;
+    }
 }
 
 void MainWindow::removeObjectPack()
@@ -789,15 +826,19 @@ void MainWindow::removeObjectPack()
         return;
     }
 
-    // Build the chooser. Untagged objects (older imports, hand-made) collect
-    // under an "Ungrouped" entry; keep a parallel list of the real pack keys so
-    // the chosen label maps back to what removePack() expects.
+    // Untagged objects (older imports, hand-made) collect under an "Ungrouped"
+    // entry. Two packs can legitimately share a display name (different GUIDs),
+    // so disambiguate those with a short id fragment to keep the chooser 1:1.
+    QHash<QString, int> nameCount;
+    for (const DeviceCatalog::PackInfo &p : packs)
+        ++nameCount[p.name];
+
     QStringList labels;
-    QStringList keys;
     for (const DeviceCatalog::PackInfo &p : packs) {
-        const QString display = p.name.isEmpty() ? tr("Ungrouped objects") : p.name;
+        QString display = p.name.isEmpty() ? tr("Ungrouped objects") : p.name;
+        if (!p.name.isEmpty() && nameCount.value(p.name) > 1 && !p.id.isEmpty())
+            display += QStringLiteral(" · ") + p.id.left(8);
         labels.append(tr("%1  (%2)").arg(display).arg(p.count));
-        keys.append(p.name);
     }
 
     bool ok = false;
@@ -809,24 +850,24 @@ void MainWindow::removeObjectPack()
     const int row = labels.indexOf(chosen);
     if (row < 0)
         return;
-    const QString key = keys.at(row);
-    const QString display = key.isEmpty() ? tr("ungrouped objects") : key;
+    const DeviceCatalog::PackInfo pack = packs.at(row);
 
-    const QString warning = key.isEmpty()
+    const QString warning = pack.name.isEmpty()
         ? tr("Remove all %n ungrouped object(s) from your library? This includes "
-             "any objects you made by hand. This cannot be undone.", "", packs.at(row).count)
+             "any objects you made by hand. This cannot be undone.", "", pack.count)
         : tr("Remove all %n object(s) in \"%1\" from your library? This cannot be undone.",
-             "", packs.at(row).count).arg(key);
+             "", pack.count).arg(pack.name);
     if (QMessageBox::question(this, tr("Remove Object Pack"), warning) != QMessageBox::Yes)
         return;
 
     QString error;
-    const int removed = m_catalog.removePack(key, &error);
+    const int removed = m_catalog.removePack(pack.id, pack.name, &error);
     if (removed < 0) {
         QMessageBox::warning(this, tr("Remove Object Pack"), error);
         return;
     }
     m_palette->populate(m_catalog);
+    const QString display = pack.name.isEmpty() ? tr("ungrouped objects") : pack.name;
     statusBar()->showMessage(
         tr("Removed %n object(s) (%1)", "", removed).arg(display), 3000);
 }

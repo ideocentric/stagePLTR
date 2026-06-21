@@ -67,26 +67,39 @@ public:
     bool addUserObject(const DeviceType &type, QString *error = nullptr);
     bool removeUserObject(const QString &id, QString *error = nullptr);
 
+    // Peek a pack file's header without importing: its GUID (`id`), display
+    // `name`, and object `count`. Any out-param may be null. Returns false on a
+    // read/parse error or an empty pack (*error set). Lets the caller mint a GUID
+    // and prompt for a name before importing when the file omits them.
+    bool readPackHeader(const QString &objectsJsonPath, QString *id, QString *name,
+                        int *count, QString *error = nullptr);
+
     // Import an object pack — an objects.json (same shape as the user library)
     // with sibling icon files — adding each object to the user library (icons
-    // copied in, existing same-id user objects replaced). Returns the number
-    // imported, or -1 on a read/parse error (*error set). addedNames, if given,
-    // collects the display names of the objects that were imported.
-    int importPack(const QString &objectsJsonPath, QStringList *addedNames = nullptr,
+    // copied in, existing same-id user objects replaced). Every object is tagged
+    // with the supplied packId (GUID) + packName so the pack can be removed as a
+    // unit. Returns the number imported, or -1 on a read/parse error (*error set);
+    // addedNames, if given, collects the imported objects' display names.
+    int importPack(const QString &objectsJsonPath, const QString &packId,
+                   const QString &packName, QStringList *addedNames = nullptr,
                    QString *error = nullptr);
 
-    // A group of user objects sharing a `pack` tag (name empty = ungrouped).
+    // A group of user objects sharing a pack identity. Grouped by id (GUID) when
+    // present, else by name; an entry with both empty is the ungrouped bucket.
     struct PackInfo {
+        QString id;
         QString name;
         int count = 0;
     };
-    // User objects grouped by pack, first-seen order (includes an empty-name
-    // entry for untagged objects when any exist).
+    // User objects grouped by pack, first-seen order (includes an empty entry for
+    // untagged objects when any exist).
     QList<PackInfo> importedPacks() const;
-    // Remove every user object tagged with `pack` (empty = ungrouped), deleting
-    // their icons and persisting once. Returns the count removed, or -1 if the
-    // library could not be saved (*error set).
-    int removePack(const QString &pack, QString *error = nullptr);
+    // Remove every user object in the pack identified by (packId, packName) —
+    // matched the same way importedPacks() groups; both empty = the ungrouped
+    // bucket. Deletes their icons and persists once. Returns the count removed,
+    // or -1 if the library could not be saved (*error set).
+    int removePack(const QString &packId, const QString &packName,
+                   QString *error = nullptr);
 
     // Portability: a custom object embedded in a .splot (icon as base64 bytes).
     static QJsonObject toEmbeddedJson(const DeviceType &type);

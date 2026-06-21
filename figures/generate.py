@@ -29,12 +29,17 @@ import itertools
 import json
 import logging
 import sys
+import uuid
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from pathlib import Path
 
 SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)  # emit clean <svg>/<path>, not <ns0:path>
+
+# Fixed namespace for deriving stable per-pack GUIDs (uuid5). Never change it, or
+# regenerated packs would get new ids and the app would treat them as new packs.
+PACK_NAMESPACE = uuid.UUID("9f3b1c2a-5d6e-4f70-8a91-b2c3d4e5f607")
 
 ROOT = Path(__file__).resolve().parent
 PARTS_DIR = ROOT / "parts"
@@ -295,13 +300,16 @@ def emit_packs(manifest: dict, dist_dir: Path, combos: list[dict],
     total = 0
     for key, group in sorted(groups.items()):
         pack_name = f"{label} — {key.title()}" if pack_by else f"{label} (all)"
-        dest = dist_dir / "packs" / (f"{_slug(label)}-{_slug(key)}" if pack_by
-                                     else f"{_slug(label)}-all")
+        slug = f"{_slug(label)}-{_slug(key)}" if pack_by else f"{_slug(label)}-all"
+        dest = dist_dir / "packs" / slug
         names = _write_svgs(group, manifest, dest)
         devices = sorted((device_entry(c, manifest, filename(c)) for c in group),
                          key=lambda d: d["id"])
         objects = {
             "version": 1,
+            # Stable per-pack GUID (uuid5 of the slug) so the app tracks packs by
+            # identity, not display name, and regenerating keeps the same id.
+            "id": str(uuid.uuid5(PACK_NAMESPACE, slug)),
             "name": pack_name,
             "_comment": "stagePLTR object pack — Import Object Pack… loads these "
                         "into your user library.",

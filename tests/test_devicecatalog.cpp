@@ -139,10 +139,21 @@ void TestDeviceCatalog::importsObjectPack()
     QVERIFY(catalog.loadFromJson(realCatalogJson(), QStringLiteral(STAGEPLT_ASSETS_DIR)));
     catalog.setUserLibraryPath(lib.path());
 
+    const QString objectsPath = QDir(pack.path()).filePath(QStringLiteral("objects.json"));
+
+    // The header peek reports the pack's name and object count (no id in this file).
+    QString hdrId, hdrName, hdrErr;
+    int hdrCount = 0;
+    QVERIFY(catalog.readPackHeader(objectsPath, &hdrId, &hdrName, &hdrCount, &hdrErr));
+    QVERIFY(hdrId.isEmpty());
+    QCOMPARE(hdrName, QStringLiteral("Test Pack"));
+    QCOMPARE(hdrCount, 2);  // counts entries, before the missing-icon one is skipped
+
     QStringList added;
     QString error;
     const int count = catalog.importPack(
-        QDir(pack.path()).filePath(QStringLiteral("objects.json")), &added, &error);
+        objectsPath, QStringLiteral("pack-guid-1"), QStringLiteral("Test Pack"),
+        &added, &error);
     QCOMPARE(count, 1);  // the entry with the missing icon is skipped
     QCOMPARE(added, QStringList{QStringLiteral("Figure X")});
 
@@ -161,8 +172,13 @@ void TestDeviceCatalog::importsObjectPack()
     QVERIFY(reloaded.loadUserLibrary());
     QVERIFY(reloaded.isUserObject(QStringLiteral("fig-x")));
 
+    // The objects carry the supplied pack identity (GUID + name).
+    QCOMPARE(fig->packId, QStringLiteral("pack-guid-1"));
+    QCOMPARE(fig->packName, QStringLiteral("Test Pack"));
+
     // A non-existent pack is a hard error, not a silent zero.
-    QCOMPARE(catalog.importPack(QStringLiteral("/no/such/objects.json")), -1);
+    QCOMPARE(catalog.importPack(QStringLiteral("/no/such/objects.json"),
+                                QStringLiteral("x"), QStringLiteral("X")), -1);
 }
 
 void TestDeviceCatalog::removesObjectPack()
@@ -191,7 +207,9 @@ void TestDeviceCatalog::removesObjectPack()
     QVERIFY(catalog.loadFromJson(realCatalogJson(), QStringLiteral(STAGEPLT_ASSETS_DIR)));
     catalog.setUserLibraryPath(lib.path());
 
-    QCOMPARE(catalog.importPack(QDir(pack.path()).filePath(QStringLiteral("objects.json"))), 2);
+    const QString packPath = QDir(pack.path()).filePath(QStringLiteral("objects.json"));
+    QCOMPARE(catalog.importPack(packPath, QStringLiteral("guid-A"),
+                                QStringLiteral("My Pack")), 2);
 
     DeviceType handmade;  // an untagged user object
     handmade.id = QStringLiteral("hand");
@@ -201,29 +219,30 @@ void TestDeviceCatalog::removesObjectPack()
         QStringLiteral(STAGEPLT_ASSETS_DIR "/mic-straight-overhead.svg"));
     QVERIFY(catalog.addUserObject(handmade));
 
-    // The pack tag persisted to disk and groups correctly.
-    QCOMPARE(catalog.find(QStringLiteral("p1"))->pack, QStringLiteral("My Pack"));
-    QVERIFY(catalog.find(QStringLiteral("hand"))->pack.isEmpty());
+    // The pack identity persisted and groups correctly.
+    QCOMPARE(catalog.find(QStringLiteral("p1"))->packId, QStringLiteral("guid-A"));
+    QCOMPARE(catalog.find(QStringLiteral("p1"))->packName, QStringLiteral("My Pack"));
+    QVERIFY(catalog.find(QStringLiteral("hand"))->packId.isEmpty());
     const auto packs = catalog.importedPacks();
     QCOMPARE(packs.size(), 2);  // "My Pack" + the ungrouped bucket
     int tagged = 0, ungrouped = 0;
     for (const auto &p : packs) {
-        if (p.name == QStringLiteral("My Pack")) { tagged = p.count; }
-        else if (p.name.isEmpty()) { ungrouped = p.count; }
+        if (p.id == QStringLiteral("guid-A")) { tagged = p.count; }
+        else if (p.id.isEmpty() && p.name.isEmpty()) { ungrouped = p.count; }
     }
     QCOMPARE(tagged, 2);
     QCOMPARE(ungrouped, 1);
 
     // Removing the pack drops its objects and their icon files, but not the
-    // hand-made one nor any built-in.
-    QCOMPARE(catalog.removePack(QStringLiteral("My Pack")), 2);
+    // hand-made one nor any built-in. Identity is by GUID, so the name is ignored.
+    QCOMPARE(catalog.removePack(QStringLiteral("guid-A"), QStringLiteral("ignored")), 2);
     QVERIFY(catalog.find(QStringLiteral("p1")) == nullptr);
     QVERIFY(catalog.find(QStringLiteral("p2")) == nullptr);
     QVERIFY(catalog.find(QStringLiteral("hand")) != nullptr);
     QVERIFY(!QFile::exists(QDir(lib.path()).filePath(QStringLiteral("p1.svg"))));
 
     // Removing the ungrouped bucket clears the hand-made object; reload confirms.
-    QCOMPARE(catalog.removePack(QString()), 1);
+    QCOMPARE(catalog.removePack(QString(), QString()), 1);
     QVERIFY(catalog.find(QStringLiteral("hand")) == nullptr);
 
     DeviceCatalog reloaded;
@@ -231,6 +250,37 @@ void TestDeviceCatalog::removesObjectPack()
     reloaded.setUserLibraryPath(lib.path());
     QVERIFY(reloaded.loadUserLibrary());
     QVERIFY(reloaded.importedPacks().isEmpty());  // nothing user-made remains
+
+    // Two *different* packs (distinct object ids) that share a display name but
+    // differ by GUID stay distinct, and removing one leaves the other — the
+    // collision case GUIDs exist to solve. (Identical object ids would instead
+    // overwrite, since the catalog is keyed by object id, not by pack.)
+    QTemporaryDir pack2;
+    QVERIFY(pack2.isValid());
+    QVERIFY(QFile::copy(QStringLiteral(STAGEPLT_ASSETS_DIR "/mic-straight-overhead.svg"),
+                        QDir(pack2.path()).filePath(QStringLiteral("fig.svg"))));
+    {
+        const QByteArray objects = R"({
+            "version": 1, "name": "Dup Name",
+            "devices": [
+                {"id": "q1", "name": "Q1", "category": "People", "icon": "fig.svg", "ports": []}
+            ]
+        })";
+        QFile f(QDir(pack2.path()).filePath(QStringLiteral("objects.json")));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(objects);
+    }
+    const QString pack2Path = QDir(pack2.path()).filePath(QStringLiteral("objects.json"));
+
+    QCOMPARE(catalog.importPack(packPath, QStringLiteral("guid-A"),
+                                QStringLiteral("Dup Name")), 2);   // p1, p2
+    QCOMPARE(catalog.importPack(pack2Path, QStringLiteral("guid-B"),
+                                QStringLiteral("Dup Name")), 1);   // q1
+    QCOMPARE(catalog.importedPacks().size(), 2);  // not merged by name
+    QCOMPARE(catalog.removePack(QStringLiteral("guid-A"), QStringLiteral("Dup Name")), 2);
+    QCOMPARE(catalog.importedPacks().size(), 1);
+    QVERIFY(catalog.find(QStringLiteral("q1")) != nullptr);  // guid-B's pack remains
+    QVERIFY(catalog.find(QStringLiteral("p1")) == nullptr);
 }
 
 void TestDeviceCatalog::embeddedObjectRoundTrip()

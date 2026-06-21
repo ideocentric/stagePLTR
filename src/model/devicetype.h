@@ -38,7 +38,11 @@ struct DeviceType
     QSizeF  defaultSize{48.0, 48.0};
     QList<Port> ports;     // default port template
     bool builtin = true;   // bundled (read-only) vs a user-created object
-    QString pack;          // source object pack (user objects only; empty = ungrouped)
+    // Source object pack (user objects only). packId is the stable identity used
+    // for grouping/removal so two packs can share a display name; packName is the
+    // label shown to the user. Both empty = ungrouped (hand-made / legacy).
+    QString packId;
+    QString packName;
 };
 
 #endif // DEVICETYPE_H
