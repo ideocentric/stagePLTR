@@ -44,6 +44,7 @@ private slots:
     void loadsRealCatalog();
     void userLibraryRoundTrip();
     void importsObjectPack();
+    void removesObjectPack();
     void embeddedObjectRoundTrip();
     void categoriesRemapped();
     void orderedCategoriesMatchDeclaredOrder();
@@ -162,6 +163,74 @@ void TestDeviceCatalog::importsObjectPack()
 
     // A non-existent pack is a hard error, not a silent zero.
     QCOMPARE(catalog.importPack(QStringLiteral("/no/such/objects.json")), -1);
+}
+
+void TestDeviceCatalog::removesObjectPack()
+{
+    // A pack with two objects, plus a hand-made (untagged) user object.
+    QTemporaryDir pack;
+    QVERIFY(pack.isValid());
+    QVERIFY(QFile::copy(QStringLiteral(STAGEPLT_ASSETS_DIR "/mic-straight-overhead.svg"),
+                        QDir(pack.path()).filePath(QStringLiteral("fig.svg"))));
+    {
+        const QByteArray objects = R"({
+            "version": 1, "name": "My Pack",
+            "devices": [
+                {"id": "p1", "name": "P1", "category": "People", "icon": "fig.svg", "ports": []},
+                {"id": "p2", "name": "P2", "category": "People", "icon": "fig.svg", "ports": []}
+            ]
+        })";
+        QFile f(QDir(pack.path()).filePath(QStringLiteral("objects.json")));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(objects);
+    }
+
+    QTemporaryDir lib;
+    QVERIFY(lib.isValid());
+    DeviceCatalog catalog;
+    QVERIFY(catalog.loadFromJson(realCatalogJson(), QStringLiteral(STAGEPLT_ASSETS_DIR)));
+    catalog.setUserLibraryPath(lib.path());
+
+    QCOMPARE(catalog.importPack(QDir(pack.path()).filePath(QStringLiteral("objects.json"))), 2);
+
+    DeviceType handmade;  // an untagged user object
+    handmade.id = QStringLiteral("hand");
+    handmade.name = QStringLiteral("Hand Made");
+    handmade.category = QStringLiteral("Amplifiers");
+    handmade.icon = DeviceIcon::fromPath(
+        QStringLiteral(STAGEPLT_ASSETS_DIR "/mic-straight-overhead.svg"));
+    QVERIFY(catalog.addUserObject(handmade));
+
+    // The pack tag persisted to disk and groups correctly.
+    QCOMPARE(catalog.find(QStringLiteral("p1"))->pack, QStringLiteral("My Pack"));
+    QVERIFY(catalog.find(QStringLiteral("hand"))->pack.isEmpty());
+    const auto packs = catalog.importedPacks();
+    QCOMPARE(packs.size(), 2);  // "My Pack" + the ungrouped bucket
+    int tagged = 0, ungrouped = 0;
+    for (const auto &p : packs) {
+        if (p.name == QStringLiteral("My Pack")) { tagged = p.count; }
+        else if (p.name.isEmpty()) { ungrouped = p.count; }
+    }
+    QCOMPARE(tagged, 2);
+    QCOMPARE(ungrouped, 1);
+
+    // Removing the pack drops its objects and their icon files, but not the
+    // hand-made one nor any built-in.
+    QCOMPARE(catalog.removePack(QStringLiteral("My Pack")), 2);
+    QVERIFY(catalog.find(QStringLiteral("p1")) == nullptr);
+    QVERIFY(catalog.find(QStringLiteral("p2")) == nullptr);
+    QVERIFY(catalog.find(QStringLiteral("hand")) != nullptr);
+    QVERIFY(!QFile::exists(QDir(lib.path()).filePath(QStringLiteral("p1.svg"))));
+
+    // Removing the ungrouped bucket clears the hand-made object; reload confirms.
+    QCOMPARE(catalog.removePack(QString()), 1);
+    QVERIFY(catalog.find(QStringLiteral("hand")) == nullptr);
+
+    DeviceCatalog reloaded;
+    QVERIFY(reloaded.loadFromJson(realCatalogJson(), QStringLiteral(STAGEPLT_ASSETS_DIR)));
+    reloaded.setUserLibraryPath(lib.path());
+    QVERIFY(reloaded.loadUserLibrary());
+    QVERIFY(reloaded.importedPacks().isEmpty());  // nothing user-made remains
 }
 
 void TestDeviceCatalog::embeddedObjectRoundTrip()

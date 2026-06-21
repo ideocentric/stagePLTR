@@ -75,6 +75,19 @@ public:
     int importPack(const QString &objectsJsonPath, QStringList *addedNames = nullptr,
                    QString *error = nullptr);
 
+    // A group of user objects sharing a `pack` tag (name empty = ungrouped).
+    struct PackInfo {
+        QString name;
+        int count = 0;
+    };
+    // User objects grouped by pack, first-seen order (includes an empty-name
+    // entry for untagged objects when any exist).
+    QList<PackInfo> importedPacks() const;
+    // Remove every user object tagged with `pack` (empty = ungrouped), deleting
+    // their icons and persisting once. Returns the count removed, or -1 if the
+    // library could not be saved (*error set).
+    int removePack(const QString &pack, QString *error = nullptr);
+
     // Portability: a custom object embedded in a .splot (icon as base64 bytes).
     static QJsonObject toEmbeddedJson(const DeviceType &type);
     static DeviceType fromEmbeddedJson(const QJsonObject &obj);

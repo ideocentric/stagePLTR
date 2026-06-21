@@ -38,6 +38,7 @@ struct DeviceType
     QSizeF  defaultSize{48.0, 48.0};
     QList<Port> ports;     // default port template
     bool builtin = true;   // bundled (read-only) vs a user-created object
+    QString pack;          // source object pack (user objects only; empty = ungrouped)
 };
 
 #endif // DEVICETYPE_H

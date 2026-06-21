@@ -42,6 +42,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -160,6 +161,10 @@ void MainWindow::createActions()
     connect(importPackAct, &QAction::triggered, this, &MainWindow::importObjectPack);
     addAction(importPackAct);
 
+    auto *removePackAct = new QAction(tr("Remove Object Pac&k…"), this);
+    connect(removePackAct, &QAction::triggered, this, &MainWindow::removeObjectPack);
+    addAction(removePackAct);
+
     auto *saveAct = new QAction(tr("&Save"), this);
     saveAct->setShortcut(QKeySequence::Save);
     connect(saveAct, &QAction::triggered, this, &MainWindow::savePlot);
@@ -268,6 +273,7 @@ void MainWindow::createMenus()
     fileMenu->addAction(byText(tr("&New")));
     fileMenu->addAction(byText(tr("&Open…")));
     fileMenu->addAction(byText(tr("Import Object &Pack…")));
+    fileMenu->addAction(byText(tr("Remove Object Pac&k…")));
     fileMenu->addSeparator();
     fileMenu->addAction(byText(tr("&Save")));
     fileMenu->addAction(byText(tr("Save &As…")));
@@ -772,6 +778,57 @@ void MainWindow::importObjectPack()
     m_palette->populate(m_catalog);  // surface the newly imported objects
     statusBar()->showMessage(tr("Imported %n object(s) into your library", "", count),
                              3000);
+}
+
+void MainWindow::removeObjectPack()
+{
+    const QList<DeviceCatalog::PackInfo> packs = m_catalog.importedPacks();
+    if (packs.isEmpty()) {
+        QMessageBox::information(this, tr("Remove Object Pack"),
+                                 tr("Your library has no custom objects to remove."));
+        return;
+    }
+
+    // Build the chooser. Untagged objects (older imports, hand-made) collect
+    // under an "Ungrouped" entry; keep a parallel list of the real pack keys so
+    // the chosen label maps back to what removePack() expects.
+    QStringList labels;
+    QStringList keys;
+    for (const DeviceCatalog::PackInfo &p : packs) {
+        const QString display = p.name.isEmpty() ? tr("Ungrouped objects") : p.name;
+        labels.append(tr("%1  (%2)").arg(display).arg(p.count));
+        keys.append(p.name);
+    }
+
+    bool ok = false;
+    const QString chosen = QInputDialog::getItem(
+        this, tr("Remove Object Pack"),
+        tr("Remove all objects from:"), labels, 0, /*editable=*/false, &ok);
+    if (!ok)
+        return;
+    const int row = labels.indexOf(chosen);
+    if (row < 0)
+        return;
+    const QString key = keys.at(row);
+    const QString display = key.isEmpty() ? tr("ungrouped objects") : key;
+
+    const QString warning = key.isEmpty()
+        ? tr("Remove all %n ungrouped object(s) from your library? This includes "
+             "any objects you made by hand. This cannot be undone.", "", packs.at(row).count)
+        : tr("Remove all %n object(s) in \"%1\" from your library? This cannot be undone.",
+             "", packs.at(row).count).arg(key);
+    if (QMessageBox::question(this, tr("Remove Object Pack"), warning) != QMessageBox::Yes)
+        return;
+
+    QString error;
+    const int removed = m_catalog.removePack(key, &error);
+    if (removed < 0) {
+        QMessageBox::warning(this, tr("Remove Object Pack"), error);
+        return;
+    }
+    m_palette->populate(m_catalog);
+    statusBar()->showMessage(
+        tr("Removed %n object(s) (%1)", "", removed).arg(display), 3000);
 }
 
 void MainWindow::offerToImportObjects(const QStringList &ids)

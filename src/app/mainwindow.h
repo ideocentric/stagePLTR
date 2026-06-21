@@ -60,6 +60,7 @@ private slots:
     void newPlot();
     void openPlot();
     void importObjectPack();
+    void removeObjectPack();
     bool savePlot();
     bool savePlotAs();
     void exportPdf();

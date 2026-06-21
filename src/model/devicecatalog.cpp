@@ -47,6 +47,7 @@ bool parseDeviceType(const QJsonObject &obj, const QString &iconBase, bool built
     out->category = obj.value(QStringLiteral("category")).toString(QStringLiteral("Other"));
     out->icon = DeviceIcon::fromPath(iconBase + QLatin1Char('/') + icon);
     out->builtin = builtin;
+    out->pack = obj.value(QStringLiteral("pack")).toString();
 
     const QJsonArray size = obj.value(QStringLiteral("defaultSize")).toArray();
     if (size.size() == 2)
@@ -79,6 +80,8 @@ QJsonObject deviceTypeToJson(const DeviceType &type)
     for (const Port &port : type.ports)
         ports.append(port.toJson());
     obj[QStringLiteral("ports")] = ports;
+    if (!type.pack.isEmpty())
+        obj[QStringLiteral("pack")] = type.pack;
     return obj;
 }
 
@@ -304,6 +307,8 @@ QJsonObject DeviceCatalog::toEmbeddedJson(const DeviceType &type)
     for (const Port &port : type.ports)
         ports.append(port.toJson());
     obj[QStringLiteral("ports")] = ports;
+    if (!type.pack.isEmpty())
+        obj[QStringLiteral("pack")] = type.pack;
     // Icon travels with the file as base64 bytes so the plot opens anywhere.
     obj[QStringLiteral("iconData")] = QString::fromLatin1(type.icon.data().toBase64());
     obj[QStringLiteral("iconFormat")] = type.icon.format();
@@ -325,6 +330,7 @@ DeviceType DeviceCatalog::fromEmbeddedJson(const QJsonObject &obj)
     for (const QJsonValue &portValue : ports)
         type.ports.append(Port::fromJson(portValue.toObject()));
 
+    type.pack = obj.value(QStringLiteral("pack")).toString();
     const QByteArray data =
         QByteArray::fromBase64(obj.value(QStringLiteral("iconData")).toString().toLatin1());
     type.icon = DeviceIcon(data, obj.value(QStringLiteral("iconFormat")).toString());
@@ -386,8 +392,13 @@ int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *added
         return -1;
     }
 
-    // Icons live alongside the pack's objects.json; resolve them against its dir.
+    // Tag every imported object with the pack's name so it can be removed as a
+    // unit later. Fall back to the directory name when the pack is unnamed.
     const QString packDir = QFileInfo(objectsJsonPath).absolutePath();
+    QString packName = doc.object().value(QStringLiteral("name")).toString();
+    if (packName.isEmpty())
+        packName = QFileInfo(packDir).fileName();
+
     int imported = 0;
     for (const QJsonValue &value : devices) {
         DeviceType type;
@@ -395,6 +406,7 @@ int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *added
             continue;  // missing id/icon name
         if (!type.icon.isValid())
             continue;  // icon file absent on disk — skip rather than write an empty one
+        type.pack = packName;
         if (!addUserObject(type))  // writes the icon + persists objects.json
             continue;
         ++imported;
@@ -402,4 +414,56 @@ int DeviceCatalog::importPack(const QString &objectsJsonPath, QStringList *added
             addedNames->append(type.name);
     }
     return imported;
+}
+
+QList<DeviceCatalog::PackInfo> DeviceCatalog::importedPacks() const
+{
+    // Group user objects by pack name, preserving first-seen order. Objects with
+    // no pack tag (older imports, hand-made objects) collect under one entry with
+    // an empty name so callers can offer an "Ungrouped" bucket.
+    QList<PackInfo> packs;
+    for (const DeviceType &t : m_devices) {
+        if (t.builtin)
+            continue;
+        bool found = false;
+        for (PackInfo &p : packs) {
+            if (p.name == t.pack) {
+                ++p.count;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            packs.append({t.pack, 1});
+    }
+    return packs;
+}
+
+int DeviceCatalog::removePack(const QString &pack, QString *error)
+{
+    // Collect matching user objects first; deleting while iterating is awkward.
+    QStringList ids;
+    for (const DeviceType &t : m_devices)
+        if (!t.builtin && t.pack == pack)
+            ids.append(t.id);
+    if (ids.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("No objects to remove for this pack");
+        return 0;
+    }
+
+    int removed = 0;
+    for (const QString &id : ids) {
+        for (int i = 0; i < m_devices.size(); ++i) {
+            if (m_devices.at(i).id == id && !m_devices.at(i).builtin) {
+                QFile::remove(QDir(m_userDir).filePath(iconFileName(m_devices.at(i))));
+                m_devices.removeAt(i);
+                ++removed;
+                break;
+            }
+        }
+    }
+    if (removed > 0 && !saveUserLibrary(error))
+        return -1;
+    return removed;
 }

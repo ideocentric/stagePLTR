@@ -22,6 +22,7 @@
 #include "devicelist.h"
 
 #include <QFont>
+#include <QScrollBar>
 
 DevicePalette::DevicePalette(QWidget *parent)
     : QToolBox(parent)
@@ -61,10 +62,23 @@ void DevicePalette::clearSections()
 
 void DevicePalette::populate(const DeviceCatalog &catalog)
 {
+    // Remember where the user was so a rebuild (after an import or a delete)
+    // doesn't collapse their section and dump them back at the top — that makes
+    // removing several objects in a row disorienting.
+    const QString openCategory = currentCategory();
+    int scroll = 0;
+    int selectedRow = -1;
+    if (auto *current = qobject_cast<DeviceList *>(currentWidget())) {
+        scroll = current->verticalScrollBar()->value();
+        selectedRow = current->currentRow();
+    }
+
     clearSections();
 
+    int restoreIndex = -1;
     for (const QString &category : catalog.orderedCategories()) {
         auto *list = new DeviceList;
+        list->setProperty("category", category);
         int added = 0;
         for (const DeviceType &type : catalog.devices()) {
             if (type.category != category)
@@ -80,6 +94,27 @@ void DevicePalette::populate(const DeviceCatalog &catalog)
                 &DevicePalette::objectContextMenu);
         const QString label = added > 0 ? QStringLiteral("%1  (%2)").arg(category).arg(added)
                                         : category;
-        addItem(list, label);
+        const int index = addItem(list, label);
+        if (category == openCategory)
+            restoreIndex = index;
     }
+
+    if (restoreIndex < 0)
+        return;
+    setCurrentIndex(restoreIndex);
+    if (auto *list = qobject_cast<DeviceList *>(widget(restoreIndex))) {
+        list->verticalScrollBar()->setValue(scroll);
+        // Re-select a neighbour of the just-removed row so repeated right-click →
+        // Delete keeps working without hunting for the next item.
+        const int rows = list->count();
+        if (selectedRow >= 0 && rows > 0)
+            list->setCurrentRow(qMin(selectedRow, rows - 1));
+    }
+}
+
+QString DevicePalette::currentCategory() const
+{
+    if (QWidget *page = currentWidget())
+        return page->property("category").toString();
+    return QString();
 }

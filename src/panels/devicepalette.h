@@ -42,6 +42,7 @@ signals:
 
 private:
     void clearSections();
+    QString currentCategory() const;  // category of the expanded section, or empty
 };
 
 #endif // DEVICEPALETTE_H
