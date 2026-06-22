@@ -248,15 +248,19 @@ stageplot-figures/
 ├── parts/                 # committed: SVG line-art parts (2D derivatives)
 │   ├── figures/  hair/  instruments/  accessories/
 ├── out/                   # committed or built: final SVGs + index.html
-└── .blendsrc/             # LOCAL ONLY — gitignored working files
+├── blender-flow/          # committed: stagegen.py, docs, stage-template.blend
+└── blendsrc/              # LOCAL ONLY — gitignored working files (.gitkeep'd)
     ├── *.blend  *.mhm  *.fbx  hair meshes, proxies, DAZ assets
 ```
 
-`.gitignore`:
+`.gitignore` (working files ignored; the asset-free stage template is the one
+committed `.blend`):
 ```
 # 3D working files and any licensed source assets — never published
-.blendsrc/
+figures/blendsrc/*
+!figures/blendsrc/.gitkeep
 *.blend
+!figures/blender-flow/stage-template.blend
 *.blend1
 *.mhm
 *.fbx

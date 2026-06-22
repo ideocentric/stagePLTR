@@ -54,6 +54,8 @@ CREASE_ANGLE  = math.radians(60)
 # for left-handed). Keeping the fragile SVG math in tested Python, not in Blender.
 
 ANCHOR_BONE   = "spine03"    # torso bone instruments attach to — VERIFY in your rig
+CLEAN_DEFAULTS = True        # on build, remove Blender's startup Cube/Camera/Light
+DEFAULT_OBJECTS = ("Cube", "Camera", "Light")  # Blender's startup object names
 LINEART_NAME  = "StageLineArt"
 COL = dict(figure="FIGURE", hair="HAIR", instrument="INSTRUMENT",
            proxy="PROXY", lineart="LINEART")
@@ -96,6 +98,26 @@ def set_collection_excluded(name, excluded):
 # =========================================================================== #
 # build
 # =========================================================================== #
+def clean_default_scene():
+    """Remove Blender's startup Cube/Camera/Light so a fresh file becomes a clean
+    stage in one click — no manual deletion, no confusion about what's needed.
+    Name-targeted and idempotent (skips anything absent); it never matches our
+    stage objects (StageCamObj, StageLineArt, TiltPivot) or an imported rig."""
+    removed = []
+    for name in DEFAULT_OBJECTS:
+        obj = bpy.data.objects.get(name)
+        if obj is not None:
+            bpy.data.objects.remove(obj, do_unlink=True)
+            removed.append(name)
+    # Drop the now-orphaned mesh/camera/light datablocks too, so the file is tidy.
+    if removed and hasattr(bpy.ops.outliner, "orphans_purge"):
+        try:
+            bpy.ops.outliner.orphans_purge(do_recursive=True)
+        except Exception as e:  # noqa
+            log.warning("orphan purge skipped: %s", e)
+    log.info("cleaned default objects: %s", ", ".join(removed) if removed else "(none)")
+
+
 def set_scene_basics():
     scene = bpy.context.scene
     scene.unit_settings.system = "METRIC"
@@ -207,12 +229,15 @@ def mark_proxy(obj):
         obj.lineart.usage = "EXCLUDE"
 
 def build():
+    if CLEAN_DEFAULTS:
+        clean_default_scene()
     set_scene_basics()
     build_collections()
     build_camera()
     ensure_lineart_object()
-    log.info("STAGE READY. Calibrate scale once: render a known-length object and "
-             "confirm 1 SVG unit = 1 mm in export settings.")
+    log.info("STAGE READY. ORTHO_SCALE=%.1f m fills the %d-px frame, so capture +"
+             " generate.py --ingest scale everything automatically (no manual"
+             " calibration).", ORTHO_SCALE, RES)
 
 # =========================================================================== #
 # attach — rigid instrument binding (follows posing, never deforms)

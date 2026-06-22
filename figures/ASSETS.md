@@ -3,7 +3,7 @@
 So the license trail is auditable for an open-source release. The rule
 (PIPELINE.md §11): **commit 2D derivatives and your own work; never commit
 purchased/licensed 3D source assets** (meshes, textures, `.duf`/`.dsf`, `.blend`,
-`.mhm`, `.fbx`). Those stay in the gitignored `.blendsrc/`.
+`.mhm`, `.fbx`). Those stay in the gitignored `blendsrc/`.
 
 stagePLTR's code and this SVG art are **dual-licensed** — code under the app's
 license, the SVG art under a separate art license (CC-BY-4.0 or CC0) noted here.

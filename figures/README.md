@@ -37,7 +37,7 @@ manifest.json  spec.md  PIPELINE.md  generate.py  ASSETS.md
 parts/   base/ head/ hair/ arms/ instruments/ accessories/   # SVG part library
 out/     generated SVGs + index.html            (gitignored)
 dist/    --emit output: builtins/ + packs/      (gitignored)
-.blendsrc/   LOCAL ONLY: .blend/.mhm/.fbx       (gitignored)
+blendsrc/    LOCAL ONLY: .blend/.mhm/.fbx       (gitignored, kept via .gitkeep)
 .venv/       LOCAL ONLY: Python environment     (gitignored)
 ```
 

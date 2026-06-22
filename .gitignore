@@ -185,10 +185,10 @@ temp/
 figures/.venv/
 __pycache__/
 *.pyc
-# Keep the .blendsrc/ folder (it documents where local Blender work lives) but
+# Keep the blendsrc/ folder (it documents where local Blender work lives) but
 # ignore everything inside it — .blend/.mhm/.fbx, svg_out captures, etc.
-figures/.blendsrc/*
-!figures/.blendsrc/.gitkeep
+figures/blendsrc/*
+!figures/blendsrc/.gitkeep
 figures/out/*.svg
 figures/out/index.html
 *.blend
@@ -198,3 +198,5 @@ figures/out/index.html
 *.obj
 *.duf
 *.dsf
+# Exception: the distributable, asset-free stage template is committed.
+!figures/blender-flow/stage-template.blend

@@ -8,19 +8,23 @@ output contract in [../spec.md](../spec.md) §11. Steps are marked **one-time** 
 
 ## Where files live (read first)
 
-Keep the **entire Blender project inside `figures/.blendsrc/`** — it is git-ignored
+Keep the **entire Blender project inside `figures/blendsrc/`** — it is git-ignored
 (so are all `*.blend`/`*.mhm`/`*.fbx`), which keeps working files and licensed MPFB
-assets out of the public repo per `PIPELINE.md` §11.
+assets out of the public repo per `PIPELINE.md` §11. (It's a normal, visible folder
+so it's easy to reach in Blender's file browser.)
 
 ```
-figures/.blendsrc/
-├── stageplot.blend         # your template + characters (save here)
+figures/blendsrc/
+├── stageplot.blend         # your characters (save here)
 └── svg_out/                # captures land here (OUT_DIR = "//svg_out/")
 ```
 
-Because `OUT_DIR = "//svg_out/"` is relative to the `.blend`, saving the `.blend`
-in `figures/.blendsrc/` puts the captures in `figures/.blendsrc/svg_out/` — all
-ignored. The committed artifacts are only the *normalized SVGs we choose to ship*
+A ready-made **`figures/blender-flow/stage-template.blend`** (clean, asset-free
+stage) is committed — copy it into `blendsrc/` as your starting point, or build
+your own from a fresh Blender (Part B). Because `OUT_DIR = "//svg_out/"` is
+relative to the `.blend`, saving in `figures/blendsrc/` puts captures in
+`figures/blendsrc/svg_out/` — all ignored. The committed artifacts are only the
+*objects we choose to ship*
 (a generated pack), never the `.blend` or raw `svg_out`.
 
 ---
@@ -40,16 +44,20 @@ ignored. The committed artifacts are only the *normalized SVGs we choose to ship
 
 ## Part B — Build the stage (one-time per .blend)
 
+The fastest start is to **copy the committed `stage-template.blend` into
+`blendsrc/`** and skip to Part C — it already has a clean, staged scene. To build
+one yourself from a fresh Blender:
+
 6. Scripting workspace ▸ Open ▸ `figures/blender-flow/stagegen.py`.
 7. Confirm `MODE = "build"` (bottom of the file) ▸ **Run Script** (▶ / Alt+P).
-8. **Check the console:**
-   - If `ensure_lineart_object` logs a fallback → **Add ▸ Grease Pencil ▸ Scene
-     Line Art**, rename it `StageLineArt`, re-run build. (Note the operator name.)
-   - Look down the camera (Numpad 0). If you see the *underside* of the head, set
-     `TILT_DEG = -8.0` and re-run.
-9. **Calibrate scale once:** render a known-length object and confirm in the GP
-   SVG export that **1 unit = 10 mm** (`spec.md` §1). Lock that exporter setting.
-10. **Save** the file as your template in `figures/.blendsrc/stageplot.blend`.
+   With `CLEAN_DEFAULTS = True` (default) it first **removes the startup
+   Cube/Camera/Light**, then stands up the stage — no manual deletion.
+8. **Sanity-check:** look down the camera (Numpad 0); if you see the *underside*
+   of the head, set `TILT_DEG = -8.0` and re-run. (On Blender 5.1 the Line Art
+   object and `use_clip_camera` export are already handled in the script.)
+9. **Save** as `figures/blendsrc/stageplot.blend` — this is your working file.
+10. *(maintainers only)* To refresh the shipped template, Save As
+    `figures/blender-flow/stage-template.blend` **before** adding any character.
 
 ## Part C — Author a character (per-character)
 
@@ -90,7 +98,7 @@ ignored. The committed artifacts are only the *normalized SVGs we choose to ship
 19. Build the importable pack from the captures:
     ```bash
     cd figures
-    python3 generate.py --ingest .blendsrc/svg_out --pack-name "My Figures"
+    python3 generate.py --ingest blendsrc/svg_out --pack-name "My Figures"
     ```
     → `dist/packs/my-figures/objects.json` + the cropped object SVGs.
 20. In stagePLTR: **File ▸ Import Object Pack…** → pick that `objects.json` → the
