@@ -183,6 +183,8 @@ temp/
 # figures/ pipeline (Python + 3D working files)
 ##############################
 figures/.venv/
+__pycache__/
+*.pyc
 # Keep the .blendsrc/ folder (it documents where local Blender work lives) but
 # ignore everything inside it — .blend/.mhm/.fbx, svg_out captures, etc.
 figures/.blendsrc/*
