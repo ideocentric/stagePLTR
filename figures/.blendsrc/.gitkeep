@@ -1,0 +1,3 @@
+# Local-only Blender working directory (see ../blender-flow/WORKFLOW.md).
+# Save your .blend here; captures land in svg_out/. Everything in this folder is
+# git-ignored except this file, which exists only to keep the folder in the repo.
