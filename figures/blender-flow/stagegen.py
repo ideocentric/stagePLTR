@@ -259,19 +259,29 @@ def bake_lineart(obj):
     return False
 
 def export_svg(filepath, obj):
-    """VERSION-SENSITIVE: GP SVG export. Verify the operator via File > Export."""
+    """VERSION-SENSITIVE: GP SVG export.
+
+    use_clip_camera=True is REQUIRED — it clips the export to the camera frame
+    (the RES-px render frame). Without it (the operator default) GP exports in raw
+    object space: huge coordinates and a content-sized viewBox, not the 0 0 RES
+    RES frame the ingest expects. Verified against Blender 5.1
+    (wm.grease_pencil_export_svg)."""
     if obj:
         bpy.context.view_layer.objects.active = obj
         obj.select_set(True)
+    kwargs = dict(filepath=filepath, selected_object_type="ACTIVE",
+                  use_clip_camera=True)
     tried = []
-    for op in ("wm.grease_pencil_export_svg", "wm.gpencil_export_svg"):
+    for op_name in ("grease_pencil_export_svg", "gpencil_export_svg"):
+        op = getattr(bpy.ops.wm, op_name, None)
+        if op is None:
+            continue
         try:
-            getattr(getattr(bpy.ops, op.split('.')[0]), op.split('.')[1])(
-                filepath=filepath, selected_object_type="ACTIVE")
+            op(**kwargs)
             log.info("exported %s", filepath)
             return True
         except Exception as e:  # noqa
-            tried.append(f"{op}: {e}")
+            tried.append(f"wm.{op_name}: {e}")
     log.error("SVG export failed (%s). In your build, use File > Export > "
               "Grease Pencil as SVG once to find the exact operator name.",
               " | ".join(tried))
