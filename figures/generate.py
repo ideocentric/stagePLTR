@@ -17,6 +17,7 @@ Usage:
   python3 generate.py --emit packs         # full matrix as one importable pack
   python3 generate.py --emit packs --pack-by style   # one pack per genre
   python3 generate.py --emit all --pack-by style     # built-ins + per-genre packs
+  python3 generate.py --ingest svg_out --pack-name "My Figures"  # Blender captures -> pack
 
 Filenames are deterministic: <instrument>_<gender>_<ethnicity>_<hand>_<style>.svg
 Swap manifest.json to JSON-with-comments or YAML at will; only load_manifest()
@@ -323,6 +324,110 @@ def emit_packs(manifest: dict, dist_dir: Path, combos: list[dict],
 
 
 # --------------------------------------------------------------------------- #
+# Ingest: turn Blender captures (complete normalized SVGs + footprint sidecars)
+# into an importable pack — no manifest/layer composition (spec.md §11).
+# --------------------------------------------------------------------------- #
+def _frame_size(root: ET.Element) -> float:
+    """The captured SVG's square frame width (spec default 200)."""
+    parts = (root.get("viewBox") or "").split()
+    if len(parts) == 4:
+        try:
+            return float(parts[2])
+        except ValueError:
+            pass
+    return 200.0
+
+
+def _cropped_capture(src_root: ET.Element, crop: tuple, mirror: bool,
+                     frame: float) -> ET.Element:
+    """A self-contained object SVG: the captured drawing cropped to `crop`
+    [x,y,w,h], optionally mirrored about the frame centre for the left-handed
+    variant (spec.md §5). The capture already carries its own <style> + classes."""
+    x, y, w, h = crop
+    fi = int(frame)
+    out = deepcopy(src_root)
+    if mirror:
+        x = fi - x - w  # mirror the crop to track the mirrored content
+        wrap = ET.Element(f"{{{SVG_NS}}}g",
+                          {"transform": f"translate({fi},0) scale(-1,1)"})
+        for child in list(out):
+            if not child.tag.endswith("style"):
+                out.remove(child)
+                wrap.append(child)
+        out.append(wrap)
+    out.set("viewBox", f"{x} {y} {w} {h}")
+    out.set("width", str(w))
+    out.set("height", str(h))
+    return out
+
+
+def ingest_objects(src_dir: str, dist_dir: Path, pack_name: str | None) -> int:
+    """Build a pack from a directory of captured `<name>.svg` (+ optional
+    `<name>.footprint.json`) objects. Each capture is one complete object; a
+    sidecar `mirror_for_left: true` also emits the free 2-D left-handed mirror."""
+    src = Path(src_dir)
+    svgs = sorted(src.glob("*.svg"))
+    if not svgs:
+        log.error("no .svg captures found in %s", src)
+        return 0
+    label = pack_name or src.name.replace("-", " ").replace("_", " ").title()
+    slug = _slug(pack_name or src.name)
+    dest = dist_dir / "packs" / slug
+    dest.mkdir(parents=True, exist_ok=True)
+
+    devices: list[dict] = []
+    for svg_path in svgs:
+        sidecar = svg_path.with_name(svg_path.stem + ".footprint.json")
+        meta: dict = {}
+        if sidecar.exists():
+            try:
+                meta = json.loads(sidecar.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as e:
+                log.warning("bad sidecar %s: %s", sidecar.name, e)
+
+        root = ET.parse(svg_path).getroot()
+        frame = _frame_size(root)
+        fp = meta.get("footprint_units")
+        if not (isinstance(fp, list) and len(fp) == 4):
+            fp = [0, 0, int(frame), int(frame)]
+            log.warning("%s: no footprint sidecar — using the full %g frame",
+                        svg_path.name, frame)
+        crop = tuple(int(v) for v in fp)
+
+        stem = svg_path.stem
+        base_id = meta.get("id") or ("fig-" + _slug(stem))
+        base_name = meta.get("name") or stem.replace("_", " ").title()
+        category = meta.get("category", "People")
+
+        icon = base_id + ".svg"
+        write_svg(_cropped_capture(root, crop, False, frame), dest / icon)
+        devices.append({"id": base_id, "name": base_name, "category": category,
+                        "icon": icon, "defaultSize": [crop[2], crop[3]], "ports": []})
+
+        if bool(meta.get("mirror_for_left", False)):
+            lid, licon = base_id + "-left", base_id + "-left.svg"
+            write_svg(_cropped_capture(root, crop, True, frame), dest / licon)
+            devices.append({"id": lid, "name": base_name + " (Left-handed)",
+                            "category": category, "icon": licon,
+                            "defaultSize": [crop[2], crop[3]], "ports": []})
+
+    devices.sort(key=lambda d: d["id"])
+    objects = {
+        "version": 1,
+        "id": str(uuid.uuid5(PACK_NAMESPACE, slug)),
+        "name": label,
+        "_comment": "stagePLTR object pack (ingested Blender captures) — "
+                    "Import Object Pack… loads these into your user library.",
+        "devices": devices,
+    }
+    (dest / "objects.json").write_text(
+        json.dumps(objects, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    log.info("ingested %d capture(s) -> %d object(s) in pack '%s' at %s",
+             len(svgs), len(devices), label, dest)
+    return len(devices)
+
+
+# --------------------------------------------------------------------------- #
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Generate overhead line-art musician figures.")
     ap.add_argument("--manifest", default=str(ROOT / "manifest.json"))
@@ -341,6 +446,12 @@ def main(argv=None) -> int:
     ap.add_argument("--pack-by", metavar="AXIS",
                     help="split packs along an axis, e.g. --pack-by style "
                          "(default: one pack for the whole matrix)")
+    ap.add_argument("--ingest", metavar="DIR",
+                    help="build a pack from Blender captures in DIR (complete "
+                         "normalized SVGs + footprint sidecars) under --dist; "
+                         "bypasses the manifest matrix")
+    ap.add_argument("--pack-name", metavar="NAME",
+                    help="display name for the --ingest pack (default: from DIR)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -356,6 +467,11 @@ def main(argv=None) -> int:
             return 2
         k, v = f.split("=", 1)
         filters[k] = v
+
+    if args.ingest:
+        n = ingest_objects(args.ingest, Path(args.dist), args.pack_name)
+        log.info("ingest complete: %d object(s) under %s", n, args.dist)
+        return 0 if n else 1
 
     manifest = load_manifest(Path(args.manifest))
     out_dir = Path(args.out)

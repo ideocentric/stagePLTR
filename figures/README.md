@@ -25,6 +25,10 @@ python3 generate.py --emit builtins           # curated built-ins + catalog.json
 python3 generate.py --emit packs              # whole matrix as one importable pack
 python3 generate.py --emit packs --pack-by style   # one pack per genre
 python3 generate.py --emit all --pack-by style     # both
+
+# Blender captures (figures/blender-flow/) -> importable pack:
+python3 generate.py --ingest path/to/svg_out --pack-name "My Figures"
+python3 -m unittest test_generate              # run the generator tests
 ```
 
 ## Layout
