@@ -11,15 +11,16 @@ from pathlib import Path
 
 import generate
 
-# A complete, normalized capture as stagegen.py would emit it: 200-frame, a
-# <style> block, .ln/.lnf classes, and the north-flip wrapper.
+# A Blender-GP-style capture: a 1024-px frame of FILLED black paths
+# (fill=#000000, stroke=none), one rectangle whose content bbox is
+# x=300 y=400 w=400 h=400.
 CAPTURE_SVG = (
-    "<?xml version='1.0' encoding='utf-8'?>\n"
-    '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" '
-    'viewBox="0 0 200 200">'
-    "<style>.ln{fill:none;stroke:#111}.lnf{fill:#fff;stroke:#111}</style>"
-    '<g transform="translate(0,200) scale(1,-1)">'
-    '<path d="M70 80 L130 120" class="ln"/></g></svg>'
+    "<?xml version='1.0' encoding='UTF-8'?>\n"
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1024px" height="1024px" '
+    'viewBox="0 0 1024 1024">'
+    '<g id="blender_frame.0"><g id="blender_object.StageLineArt">'
+    '<path d="M300,400L700,400L700,800L300,800z" fill="#000000" stroke="none"/>'
+    "</g></g></svg>"
 )
 
 
@@ -35,7 +36,6 @@ class CropForTests(unittest.TestCase):
                          (44, 42, 112, 116))
 
     def test_left_handed_mirrors_x(self):
-        # x' = 200 - 44 - 112 = 44 (the curated footprint is centred → symmetric)
         self.assertEqual(
             generate.crop_for({"instrument": "guitar", "handedness": "left"}, self.manifest),
             (44, 42, 112, 116))
@@ -45,35 +45,49 @@ class CropForTests(unittest.TestCase):
                          (0, 0, 200, 200))
 
 
-class CroppedCaptureTests(unittest.TestCase):
-    def test_mirror_flips_crop_and_wraps(self):
+class CaptureHelperTests(unittest.TestCase):
+    def test_content_bbox_from_paths_only(self):
+        # The id="blender_frame.0" etc. must NOT pollute the geometry bbox.
         root = ET.fromstring(CAPTURE_SVG)
-        out = generate._cropped_capture(root, (60, 62, 80, 76), mirror=True, frame=200.0)
-        self.assertEqual(out.get("viewBox"), "60 62 80 76")  # 200-60-80 = 60
-        wrap = [c for c in out if c.tag.endswith("}g")
-                and "scale(-1,1)" in (c.get("transform") or "")]
-        self.assertEqual(len(wrap), 1)
-        # the <style> stays at the top level, not inside the mirror wrapper
-        self.assertTrue(any(c.tag.endswith("style") for c in out))
+        self.assertEqual(generate._content_bbox(root), (300.0, 400.0, 400.0, 400.0))
 
-    def test_right_is_cropped_not_wrapped(self):
+    def test_src_frame_from_viewbox(self):
+        self.assertEqual(generate._src_frame(ET.fromstring(CAPTURE_SVG)), 1024.0)
+
+    def test_recolor_fills_to_ink(self):
         root = ET.fromstring(CAPTURE_SVG)
-        out = generate._cropped_capture(root, (60, 62, 80, 76), mirror=False, frame=200.0)
-        self.assertEqual(out.get("viewBox"), "60 62 80 76")
-        self.assertEqual((out.get("width"), out.get("height")), ("80", "76"))
+        generate._recolor(root)
+        out = ET.tostring(root, encoding="unicode")
+        self.assertIn(generate.INK, out)
+        self.assertNotIn("#000000", out)
+
+    def test_object_svg_crops_in_source_space(self):
+        root = ET.fromstring(CAPTURE_SVG)
+        out = generate._object_svg(root, (300, 400, 400, 400), mirror=False, frame=1024)
+        self.assertEqual(out.get("viewBox"), "300 400 400 400")
+        self.assertEqual((out.get("width"), out.get("height")), ("400", "400"))
+
+    def test_object_svg_mirror_flips_crop_and_wraps(self):
+        root = ET.fromstring(CAPTURE_SVG)
+        out = generate._object_svg(root, (300, 400, 400, 400), mirror=True, frame=1024)
+        self.assertEqual(out.get("viewBox"), "324 400 400 400")  # 1024-300-400
+        wrap = [c for c in out if c.tag.endswith("}g")
+                and "translate(1024,0) scale(-1,1)" == c.get("transform")]
+        self.assertEqual(len(wrap), 1)
 
 
 class IngestTests(unittest.TestCase):
-    def _capture_dir(self, tmp, mirror=True):
+    def _capture_dir(self, tmp, mirror=True, sidecar=True):
         d = Path(tmp)
-        (d / "guitar_fem_punk.svg").write_text(CAPTURE_SVG, encoding="utf-8")
-        (d / "guitar_fem_punk.footprint.json").write_text(json.dumps({
-            "name": "Guitarist — Female, Punk", "category": "People",
-            "footprint_units": [60, 62, 80, 76], "mirror_for_left": mirror,
-        }), encoding="utf-8")
+        (d / "female_guitarist.svg").write_text(CAPTURE_SVG, encoding="utf-8")
+        if sidecar:
+            (d / "female_guitarist.json").write_text(json.dumps({
+                "name": "Guitarist — Female", "category": "People",
+                "mirror_for_left": mirror,
+            }), encoding="utf-8")
         return d
 
-    def test_ingest_emits_pack_with_mirror(self):
+    def test_ingest_real_format(self):
         with tempfile.TemporaryDirectory() as cap, tempfile.TemporaryDirectory() as dist:
             self._capture_dir(cap)
             n = generate.ingest_objects(cap, Path(dist), "My Figures")
@@ -81,13 +95,28 @@ class IngestTests(unittest.TestCase):
             pack = Path(dist) / "packs" / "my-figures"
             obj = json.loads((pack / "objects.json").read_text())
             self.assertEqual(obj["name"], "My Figures")
-            self.assertTrue(obj["id"])  # stable GUID present
+            self.assertTrue(obj["id"])
             ids = sorted(d["id"] for d in obj["devices"])
-            self.assertEqual(ids, ["fig-guitar-fem-punk", "fig-guitar-fem-punk-left"])
+            self.assertEqual(ids, ["fig-female-guitarist", "fig-female-guitarist-left"])
             for d in obj["devices"]:
-                self.assertEqual(d["defaultSize"], [80, 76])
-                self.assertEqual(d["category"], "People")
+                # 400 px in a 1024 frame -> round(400 * 200/1024) = 78 units
+                self.assertEqual(d["defaultSize"], [78, 78])
                 self.assertTrue((pack / d["icon"]).exists())
+            # the shipped object SVG is recoloured + cropped
+            svg = (pack / "fig-female-guitarist.svg").read_text()
+            self.assertIn('viewBox="300 400 400 400"', svg)
+            self.assertIn(generate.INK, svg)
+            self.assertNotIn("#000000", svg)
+
+    def test_no_sidecar_uses_filename(self):
+        with tempfile.TemporaryDirectory() as cap, tempfile.TemporaryDirectory() as dist:
+            self._capture_dir(cap, mirror=False, sidecar=False)
+            n = generate.ingest_objects(cap, Path(dist), "Pack")
+            self.assertEqual(n, 1)  # no sidecar -> no mirror
+            obj = json.loads((Path(dist) / "packs/pack/objects.json").read_text())
+            self.assertEqual(obj["devices"][0]["id"], "fig-female-guitarist")
+            self.assertEqual(obj["devices"][0]["name"], "Female Guitarist")
+            self.assertEqual(obj["devices"][0]["category"], "People")
 
     def test_stable_guid_across_runs(self):
         with tempfile.TemporaryDirectory() as cap, \
@@ -98,14 +127,6 @@ class IngestTests(unittest.TestCase):
             id1 = json.loads((Path(d1) / "packs/my-figures/objects.json").read_text())["id"]
             id2 = json.loads((Path(d2) / "packs/my-figures/objects.json").read_text())["id"]
             self.assertEqual(id1, id2)
-
-    def test_no_sidecar_falls_back_to_full_frame(self):
-        with tempfile.TemporaryDirectory() as cap, tempfile.TemporaryDirectory() as dist:
-            Path(cap, "lonely.svg").write_text(CAPTURE_SVG, encoding="utf-8")
-            n = generate.ingest_objects(cap, Path(dist), "Pack")
-            self.assertEqual(n, 1)
-            obj = json.loads((Path(dist) / "packs/pack/objects.json").read_text())
-            self.assertEqual(obj["devices"][0]["defaultSize"], [200, 200])
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ import argparse
 import itertools
 import json
 import logging
+import re
 import sys
 import uuid
 import xml.etree.ElementTree as ET
@@ -324,36 +325,65 @@ def emit_packs(manifest: dict, dist_dir: Path, combos: list[dict],
 
 
 # --------------------------------------------------------------------------- #
-# Ingest: turn Blender captures (complete normalized SVGs + footprint sidecars)
-# into an importable pack — no manifest/layer composition (spec.md §11).
+# Ingest: turn Blender captures (complete SVGs) into an importable pack — no
+# manifest/layer composition (spec.md §11). The crop and real-world size come
+# from the SVG's own content bbox, so off-centred captures still produce tight,
+# correctly-scaled objects without a separate footprint computation.
 # --------------------------------------------------------------------------- #
-def _frame_size(root: ET.Element) -> float:
-    """The captured SVG's square frame width (spec default 200)."""
+INGEST_FRAME_UNITS = 200       # the capture's full px frame = ORTHO_SCALE (2 m) = 200 units
+INK = "#111111"                # spec.md §2 ink (Blender GP exports pure #000000)
+_NUM = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
+
+
+def _src_frame(root: ET.Element) -> float:
+    """The capture's full frame width in source px (its viewBox width)."""
     parts = (root.get("viewBox") or "").split()
     if len(parts) == 4:
         try:
             return float(parts[2])
         except ValueError:
             pass
-    return 200.0
+    return float(INGEST_FRAME_UNITS)
 
 
-def _cropped_capture(src_root: ET.Element, crop: tuple, mirror: bool,
-                     frame: float) -> ET.Element:
-    """A self-contained object SVG: the captured drawing cropped to `crop`
-    [x,y,w,h], optionally mirrored about the frame centre for the left-handed
-    variant (spec.md §5). The capture already carries its own <style> + classes."""
+def _content_bbox(root: ET.Element):
+    """Tight (minx, miny, w, h) of all path geometry in source units. Blender's
+    GP line art is polylines (M/L/z), so every number in `d` is an x or y."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for el in root.iter():
+        d = el.get("d")
+        if not d:
+            continue
+        nums = [float(n) for n in _NUM.findall(d)]
+        xs.extend(nums[0::2])
+        ys.extend(nums[1::2])
+    if not xs or not ys:
+        return None
+    return (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+
+
+def _recolor(root: ET.Element) -> None:
+    """Recolour filled line art to the spec ink (GP exports pure #000000)."""
+    for el in root.iter():
+        fill = el.get("fill")
+        if fill and fill != "none":
+            el.set("fill", INK)
+
+
+def _object_svg(src_root: ET.Element, crop, mirror: bool, frame: int) -> ET.Element:
+    """A self-contained object SVG: the capture cropped (viewBox) to `crop`
+    [x,y,w,h] in source space, optionally mirrored about the frame centre for the
+    left-handed variant (spec.md §5)."""
     x, y, w, h = crop
-    fi = int(frame)
     out = deepcopy(src_root)
     if mirror:
-        x = fi - x - w  # mirror the crop to track the mirrored content
+        x = frame - x - w  # mirror the crop to track the mirrored content
         wrap = ET.Element(f"{{{SVG_NS}}}g",
-                          {"transform": f"translate({fi},0) scale(-1,1)"})
+                          {"transform": f"translate({frame},0) scale(-1,1)"})
         for child in list(out):
-            if not child.tag.endswith("style"):
-                out.remove(child)
-                wrap.append(child)
+            out.remove(child)
+            wrap.append(child)
         out.append(wrap)
     out.set("viewBox", f"{x} {y} {w} {h}")
     out.set("width", str(w))
@@ -363,8 +393,9 @@ def _cropped_capture(src_root: ET.Element, crop: tuple, mirror: bool,
 
 def ingest_objects(src_dir: str, dist_dir: Path, pack_name: str | None) -> int:
     """Build a pack from a directory of captured `<name>.svg` (+ optional
-    `<name>.footprint.json`) objects. Each capture is one complete object; a
-    sidecar `mirror_for_left: true` also emits the free 2-D left-handed mirror."""
+    `<name>.json` metadata) objects. Each capture is one complete object cropped
+    to its content; a sidecar `mirror_for_left: true` also emits the free 2-D
+    left-handed mirror."""
     src = Path(src_dir)
     svgs = sorted(src.glob("*.svg"))
     if not svgs:
@@ -377,22 +408,29 @@ def ingest_objects(src_dir: str, dist_dir: Path, pack_name: str | None) -> int:
 
     devices: list[dict] = []
     for svg_path in svgs:
-        sidecar = svg_path.with_name(svg_path.stem + ".footprint.json")
         meta: dict = {}
-        if sidecar.exists():
-            try:
-                meta = json.loads(sidecar.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as e:
-                log.warning("bad sidecar %s: %s", sidecar.name, e)
+        for cand in (svg_path.with_suffix(".json"),
+                     svg_path.with_name(svg_path.stem + ".footprint.json")):
+            if cand.exists():
+                try:
+                    meta = json.loads(cand.read_text(encoding="utf-8"))
+                except json.JSONDecodeError as e:
+                    log.warning("bad sidecar %s: %s", cand.name, e)
+                break
 
         root = ET.parse(svg_path).getroot()
-        frame = _frame_size(root)
-        fp = meta.get("footprint_units")
-        if not (isinstance(fp, list) and len(fp) == 4):
-            fp = [0, 0, int(frame), int(frame)]
-            log.warning("%s: no footprint sidecar — using the full %g frame",
-                        svg_path.name, frame)
-        crop = tuple(int(v) for v in fp)
+        _recolor(root)
+        frame = round(_src_frame(root))
+        bbox = _content_bbox(root)
+        if bbox is None:
+            log.warning("%s: no path geometry — skipping", svg_path.name)
+            continue
+        bx, by, bw, bh = bbox
+        crop = (round(bx), round(by), round(bw), round(bh))
+        # Real-world size: the capture's full px frame is the 2 m / 200-unit frame,
+        # so 1 px -> (200 / frame) units (spec.md §1).
+        factor = INGEST_FRAME_UNITS / frame
+        size = [max(1, round(bw * factor)), max(1, round(bh * factor))]
 
         stem = svg_path.stem
         base_id = meta.get("id") or ("fig-" + _slug(stem))
@@ -400,16 +438,16 @@ def ingest_objects(src_dir: str, dist_dir: Path, pack_name: str | None) -> int:
         category = meta.get("category", "People")
 
         icon = base_id + ".svg"
-        write_svg(_cropped_capture(root, crop, False, frame), dest / icon)
+        write_svg(_object_svg(root, crop, False, frame), dest / icon)
         devices.append({"id": base_id, "name": base_name, "category": category,
-                        "icon": icon, "defaultSize": [crop[2], crop[3]], "ports": []})
+                        "icon": icon, "defaultSize": size, "ports": []})
 
         if bool(meta.get("mirror_for_left", False)):
             lid, licon = base_id + "-left", base_id + "-left.svg"
-            write_svg(_cropped_capture(root, crop, True, frame), dest / licon)
+            write_svg(_object_svg(root, crop, True, frame), dest / licon)
             devices.append({"id": lid, "name": base_name + " (Left-handed)",
                             "category": category, "icon": licon,
-                            "defaultSize": [crop[2], crop[3]], "ports": []})
+                            "defaultSize": size, "ports": []})
 
     devices.sort(key=lambda d: d["id"])
     objects = {

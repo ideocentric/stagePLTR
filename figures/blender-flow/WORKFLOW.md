@@ -77,10 +77,13 @@ ignored. The committed artifacts are only the *normalized SVGs we choose to ship
              instrument="guitar", armature="Human", bone=ANCHOR_BONE),
     ]
     ```
-17. Set `MODE = "capture"` ▸ Run Script. Per subject it isolates → attaches →
-    bakes Line Art → exports → **normalizes** to the spec frame → writes the
-    `<name>.footprint.json` sidecar, into `svg_out/`.
-18. Watch the console for bake/export fallback messages (note operator names).
+17. Add optional metadata to each `SUBJECTS` entry — `display="Guitarist —
+    Female, Punk"`, `category="People"`, `mirror_for_left=True` — so it travels to
+    the pack.
+18. Set `MODE = "capture"` ▸ Run Script. Per subject it isolates → attaches →
+    exports the **raw** Grease-Pencil SVG → writes a `<name>.json` metadata
+    sidecar, into `svg_out/`. (No bake needed on 5.1.) Watch the console for any
+    export fallback message (note the operator name).
 
 ## Part E — Assemble + load into the app (per batch)
 
@@ -99,10 +102,10 @@ ignored. The committed artifacts are only the *normalized SVGs we choose to ship
 ## First-pass shortcut
 
 For the very first run, do **A → B → one character in C → capture one subject in
-D**. Then hand back two things so the pipeline can be hardened:
+D → ingest in E**. The capture format and ingest are already validated against
+Blender 5.1, so this should produce a usable object. If anything trips:
 
-- the **raw exported SVG** (the GP export *before* normalization), and
-- any **console fallback messages** from steps 8 / 18.
-
-These lock `stagegen.py`'s `normalize_svg` (axis flip + 10 mm/unit scale) and the
-version-sensitive Grease-Pencil operators against your actual Blender build.
+- paste any **console fallback message** from the GP create (step 8) or SVG
+  export (step 18) — these are the only version-sensitive operators left, and
+- if the imported figure looks wrong (size/orientation), send the raw `svg_out`
+  SVG and we'll adjust `generate.py --ingest`.

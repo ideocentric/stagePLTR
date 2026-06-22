@@ -6,10 +6,11 @@ toolkit. This is the contributor-facing setup; it complements `../PIPELINE.md`
 (the design rationale) and `../spec.md` §11 (the capture→object contract), and
 feeds `../generate.py` (assembly + pack emit).
 
-Each finished character is captured as **one complete SVG object** (body, hair,
-and instrument together) and normalized to the `spec.md` frame (1 unit = 10 mm,
-`0 0 200 200`, centred, north-facing, `.ln`/`.lnf`), then emitted into an
-importable object pack.
+Each finished character is captured as **one complete SVG** (body, hair, and
+instrument together). `stagegen.py` only exports the raw Grease-Pencil SVG plus a
+small metadata sidecar; `../generate.py --ingest` then recolours it to the spec
+ink, crops to the figure's content, derives its real-world size, mirrors for
+left-handed, and emits an importable object pack (`spec.md` §11).
 
 ---
 
@@ -65,8 +66,9 @@ template `.blend`). It sets, from one config block:
 Calibrate scale **once**: render a known-length object, confirm in the SVG
 exporter that **1 unit maps to 10 mm** (matching `spec.md` §1), and lock that
 exporter scale. After that every export is automatically to scale and to each
-other. Capture then normalizes each SVG to the spec frame (centre, north, classes)
-and writes the object's `footprint_units` sidecar automatically.
+other. Capture then writes the raw SVG + a metadata sidecar; `generate.py
+--ingest` derives each object's real size from its own content, so scale is
+consistent automatically.
 
 ## 4. Instruments follow the figure (the "wardrobe" behaviour, done right)
 
@@ -105,9 +107,9 @@ more reliable for a one-off rigid prop.
    collection named for the combo (e.g. `CHAR_guitar_fem_hairlong`), and add an
    entry to `SUBJECTS` in `stagegen.py`.
 6. **Capture** — set `MODE = "capture"` and run; for each subject it bakes Line
-   Art, exports the SVG, **normalizes** it to the spec frame (scale to 10 mm/unit,
-   recentre to (100,100), flip to north, strip inline stroke → `.ln`/`.lnf`), and
-   writes its `footprint_units` sidecar.
+   Art and exports the raw SVG, then writes a `<name>.json` metadata sidecar
+   (display name, category, `mirror_for_left`). All SVG processing happens later
+   in `generate.py --ingest`.
 7. **Assemble** — run the generator's pack emit over the captured objects
    (`python3 generate.py --emit packs`) to produce the importable `objects.json`
    pack; handedness is mirrored in 2D there (no re-render). Load the result in
@@ -117,8 +119,8 @@ more reliable for a one-off rigid prop.
 
 `stagegen.py` `MODE = "capture"` loops over `SUBJECTS`, and for each: isolates
 its collection from the render/Line Art, attaches the listed instrument, bakes
-Line Art, exports the SVG, normalizes it to the spec frame, and writes the
-`footprint_units` sidecar. Each subject is **one complete character → one object**.
+Line Art, exports the raw SVG, and writes a metadata sidecar. Each subject is
+**one complete character → one object** (sizing/cropping happen in `--ingest`).
 You capture every character you want to ship, but **never** a left-handed twin —
 handedness is the free 2-D mirror in `generate.py`. (Reuse pays off in authoring,
 not rendering: a saved MPFB human preset + saved pose let you spin up a new

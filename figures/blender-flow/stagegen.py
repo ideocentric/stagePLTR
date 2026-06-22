@@ -10,19 +10,22 @@ Three jobs, one file:
              saved .blend; this script regenerates it reproducibly).
   attach   — rigidly bind an instrument object to a character's rig bone so the
              instrument follows the figure when it is reposed (no deformation).
-  capture  — iterate prepared subjects, toggle visibility, bake Line Art, and
-             export one SVG per subject with deterministic names.
+  capture  — iterate prepared subjects, isolate each, attach its instrument, and
+             export one raw Grease-Pencil SVG + a small metadata sidecar per
+             subject. All SVG processing (recolour, crop, size, mirror) is done
+             later by `figures/generate.py --ingest`, in tested stdlib Python —
+             not here — so the fragile bits stay out of Blender.
 
 WHY NOT SCRIPT MPFB ITSELF: character creation in MPFB is slider-driven and its
 operators are version-fragile, so characters are made interactively and saved
 (as MPFB human presets or as named collections). This script automates the
 stable, repetitive part: staging, attaching, and capturing.
 
-VERSION-SENSITIVE CALLS (Grease Pencil v3, Blender 4.3+): the three functions
-ensure_lineart_object(), bake_lineart(), and export_svg() touch GP operators
-whose names changed across versions. Each is wrapped and logged; if one fails,
-the console prints the manual-menu fallback. Validate them once against your
-Blender build (the menu items reveal the exact operator names).
+VERSION-SENSITIVE CALLS (Grease Pencil v3): ensure_lineart_object(), the optional
+bake_lineart(), and export_svg() touch GP operators whose names changed across
+versions. Each is wrapped and logged; if one fails, the console prints the
+manual-menu fallback. Verified against Blender 5.1 (create uses
+type='LINEART_SCENE'; live export needs no bake).
 """
 import math
 import logging
@@ -38,34 +41,31 @@ TILT_DEG      = 8.0          # camera tilt from vertical (0 = true plan)
 ORTHO_SCALE   = 2.0          # metres across the frame = 200 spec units (spec.md §1)
 CAM_HEIGHT    = 5.0          # metres above pivot (orthographic, so distance is cosmetic)
 PIVOT_Z       = 0.95         # tilt about ~hip height so the figure stays framed
-RES           = 1024         # px, square
+RES           = 1024         # px, square; this full frame = ORTHO_SCALE (2 m) = 200 units
 OUT_DIR       = "//svg_out/" # // = relative to this .blend
 STROKE_PX     = 6            # Line Art stroke thickness
 CREASE_ANGLE  = math.radians(60)
 
-# Output contract (spec.md §1, §11): the captured SVG is normalized into a square
-# 0 0 FRAME_UNITS frame where 1 unit = UNIT_MM mm. ORTHO_SCALE metres map to
-# FRAME_UNITS, i.e. 2.0 m -> 200 units -> 1 unit = 10 mm.
-FRAME_UNITS   = 200          # spec frame width/height in units
-UNIT_MM       = 10           # millimetres per unit (ORTHO_SCALE*1000 / FRAME_UNITS)
-# Must match manifest.json "style_def" so the generator's injected <style> drives
-# the look; parts/objects carry classes, not inline stroke.
-STYLE_DEF = (".ln{fill:none;stroke:#111;stroke-width:1.6;stroke-linejoin:round;"
-             "stroke-linecap:round}"
-             ".lnf{fill:#fff;stroke:#111;stroke-width:1.6;stroke-linejoin:round;"
-             "stroke-linecap:round}")
+# Output contract (spec.md §1, §11): the camera's ORTHO_SCALE metres fill the
+# RES-px render frame, so that frame is the 2 m / 200-unit spec frame. capture()
+# only EXPORTS the raw Grease-Pencil SVG (filled #000000 line art, RES-px viewBox)
+# plus a small metadata sidecar; figures/generate.py --ingest does all the SVG
+# work (recolour to spec ink, crop to the content bbox, derive defaultSize, mirror
+# for left-handed). Keeping the fragile SVG math in tested Python, not in Blender.
 
 ANCHOR_BONE   = "spine03"    # torso bone instruments attach to — VERIFY in your rig
-FLIP_Y        = True         # GP export is Y-up; SVG is Y-down. VALIDATE per build.
 LINEART_NAME  = "StageLineArt"
 COL = dict(figure="FIGURE", hair="HAIR", instrument="INSTRUMENT",
            proxy="PROXY", lineart="LINEART")
 
 # For capture mode: each subject is a prepared character. Put each character's
 # body+hair+instrument in its own collection (or sub-collections) and list them.
+# Optional metadata travels to the pack via a sidecar: display (shown name),
+# category (palette section), mirror_for_left (emit the free 2-D left mirror).
 SUBJECTS = [
-    # dict(name="guitar_fem_hairlong_R", collection="CHAR_guitar_fem_hairlong",
-    #      instrument="guitar", armature="Human", bone=ANCHOR_BONE),
+    # dict(name="guitar_fem_punk", collection="CHAR_guitar_fem_punk",
+    #      instrument="guitar", armature="Human", bone=ANCHOR_BONE,
+    #      display="Guitarist — Female, Punk", category="People", mirror_for_left=True),
 ]
 
 # =========================================================================== #
@@ -151,16 +151,26 @@ def ensure_lineart_object():
     """Find or create the Line Art Grease Pencil object and configure it."""
     obj = bpy.data.objects.get(LINEART_NAME)
     if obj is None:
-        # VERSION-SENSITIVE: GP-with-LineArt add operator differs by build.
+        # VERSION-SENSITIVE: the "Scene Line Art" GP add operator + its type enum
+        # differ by build. Blender 5.x uses type='LINEART_SCENE'; older GPv3 used
+        # 'LINEART'; legacy GPv2 used object.gpencil_add.
+        attempts = (
+            ("grease_pencil_add", "LINEART_SCENE"),  # Blender 5.x (verified 5.1)
+            ("grease_pencil_add", "LINEART"),        # earlier GPv3
+            ("gpencil_add", "LINEART"),              # legacy GPv2
+        )
         created = False
-        for attempt in ("object.grease_pencil_add", "object.gpencil_add"):
-            op = bpy.ops
+        for op_name, gp_type in attempts:
+            op = getattr(bpy.ops.object, op_name, None)
+            if op is None:
+                continue
             try:
-                getattr(getattr(op, attempt.split('.')[0]), attempt.split('.')[1])(type="LINEART")
+                op(type=gp_type)
                 created = True
+                log.info("created Line Art object via object.%s(type=%r)", op_name, gp_type)
                 break
             except Exception as e:  # noqa
-                log.warning("could not create via %s: %s", attempt, e)
+                log.warning("create via object.%s(type=%r) failed: %s", op_name, gp_type, e)
         if not created:
             log.error("Create the Line Art object manually: Add > Grease Pencil > "
                       "Scene Line Art, rename it to %r, then re-run build.", LINEART_NAME)
@@ -227,101 +237,15 @@ def attach_instrument(instrument_name, armature_name, bone_name=ANCHOR_BONE):
              instrument_name, armature_name, bone_name)
 
 # =========================================================================== #
-# normalize + footprint — make a raw GP export obey spec.md
+# capture — export the raw GP SVG + a metadata sidecar per subject
 # =========================================================================== #
-def collection_mesh_objects(collection_name):
-    col = bpy.data.collections.get(collection_name)
-    return [o for o in col.all_objects if o.type == "MESH"] if col else []
+# Blender 5.x exports Line Art live (no bake needed — verified on 5.1); set True
+# only if a build yields empty SVGs without baking first.
+BAKE_FIRST = False
 
 
-def compute_footprint(objs):
-    """Project the subject's world bounding box through the camera into the
-    spec frame and return `footprint_units` [x, y, w, h] (ints). Reliable: it
-    measures Blender geometry, not the exported SVG, so no SVG geometry engine is
-    needed. world_to_camera_view gives 0..1 with origin bottom-left; SVG y is
-    flipped (down)."""
-    try:
-        from bpy_extras.object_utils import world_to_camera_view
-        from mathutils import Vector
-    except Exception as e:  # noqa
-        log.warning("footprint: bpy_extras/mathutils unavailable: %s", e)
-        return None
-    scene = bpy.context.scene
-    cam = scene.camera
-    if not cam or not objs:
-        log.warning("footprint: no camera or no subject meshes")
-        return None
-    xs, ys = [], []
-    for o in objs:
-        for corner in o.bound_box:
-            ndc = world_to_camera_view(scene, cam, o.matrix_world @ Vector(corner[:]))
-            xs.append(ndc.x)
-            ys.append(ndc.y)
-    x0, x1 = max(0.0, min(xs)), min(1.0, max(xs))
-    y0, y1 = max(0.0, min(ys)), min(1.0, max(ys))
-    return [round(x0 * FRAME_UNITS), round((1.0 - y1) * FRAME_UNITS),
-            round((x1 - x0) * FRAME_UNITS), round((y1 - y0) * FRAME_UNITS)]
-
-
-def normalize_svg(filepath):
-    """Rewrite a raw Grease-Pencil SVG to obey spec.md §1/§2/§11: a `0 0 200 200`
-    frame, `.ln`/`.lnf` classes instead of inline stroke, and north-up. Scale is
-    assumed already calibrated to 1 unit = 10 mm at export (REQUIREMENTS §3), so
-    this sets the frame + styling rather than rescaling. The tight crop comes
-    later from the footprint sidecar, so a full-frame viewBox here is fine.
-
-    VALIDATE the axis flip (FLIP_Y) and that exported coordinates land in 0..200
-    against your Blender build's first real export, then we lock it."""
-    import xml.etree.ElementTree as ET
-    svg_ns = "http://www.w3.org/2000/svg"
-    ET.register_namespace("", svg_ns)
-    try:
-        tree = ET.parse(filepath)
-        root = tree.getroot()
-    except Exception as e:  # noqa
-        log.error("normalize: cannot parse %s: %s", filepath, e)
-        return False
-
-    root.set("viewBox", f"0 0 {FRAME_UNITS} {FRAME_UNITS}")
-    root.set("width", str(FRAME_UNITS))
-    root.set("height", str(FRAME_UNITS))
-
-    if not any(c.tag.endswith("style") for c in root):
-        style = ET.Element(f"{{{svg_ns}}}style")
-        style.text = STYLE_DEF
-        root.insert(0, style)
-
-    # Strip inline stroke and class stroked elements. GP export rarely fills, so
-    # default to .ln (open line work); flip a shape to .lnf by hand where it must
-    # occlude what is beneath it.
-    for el in root.iter():
-        tag = el.tag.split("}")[-1]
-        if tag in ("path", "polyline", "line", "polygon"):
-            filled = el.get("fill") not in (None, "none") or tag == "polygon"
-            for attr in ("stroke", "stroke-width", "stroke-linecap",
-                         "stroke-linejoin", "style", "fill"):
-                el.attrib.pop(attr, None)
-            el.set("class", "lnf" if filled else "ln")
-
-    if FLIP_Y:
-        wrap = ET.Element(f"{{{svg_ns}}}g")
-        wrap.set("transform", f"translate(0,{FRAME_UNITS}) scale(1,-1)")
-        for child in list(root):
-            if not child.tag.endswith("style"):
-                root.remove(child)
-                wrap.append(child)
-        root.append(wrap)
-
-    tree.write(filepath, encoding="utf-8", xml_declaration=True)
-    log.info("normalized %s -> spec frame", filepath)
-    return True
-
-
-# =========================================================================== #
-# capture — bake Line Art + export SVG per subject
-# =========================================================================== #
 def bake_lineart(obj):
-    """VERSION-SENSITIVE: bakes Line Art strokes so they can be exported."""
+    """VERSION-SENSITIVE: bake Line Art strokes (used only when BAKE_FIRST)."""
     if obj:
         bpy.context.view_layer.objects.active = obj
     for op in ("object.lineart_bake_strokes", "gpencil.lineart_bake_strokes"):
@@ -330,8 +254,8 @@ def bake_lineart(obj):
             return True
         except Exception as e:  # noqa
             log.warning("bake via %s failed: %s", op, e)
-    log.warning("Could not bake Line Art automatically; the live modifier may "
-                "still export. If output is empty, bake manually first.")
+    log.warning("Could not bake Line Art automatically; the live modifier usually "
+                "still exports. If output is empty, set BAKE_FIRST or bake manually.")
     return False
 
 def export_svg(filepath, obj):
@@ -376,20 +300,22 @@ def capture():
             attach_instrument(sub["instrument"], sub["armature"],
                               sub.get("bone", ANCHOR_BONE))
         bpy.context.view_layer.update()
-        bake_lineart(la)
+        if BAKE_FIRST:
+            bake_lineart(la)
         svg_path = os.path.join(out, f"{sub['name']}.svg")
         if not export_svg(svg_path, la):
             continue
-        # Normalize the raw export to the spec frame, and record the object's
-        # footprint (from Blender geometry) so generate.py can crop + size it.
-        normalize_svg(svg_path)
-        fp = compute_footprint(collection_mesh_objects(sub["collection"]))
-        if fp:
-            sidecar = svg_path[:-4] + ".footprint.json"
-            with open(sidecar, "w", encoding="utf-8") as fh:
-                json.dump({"name": sub["name"], "footprint_units": fp}, fh, indent=2)
-            log.info("footprint %s -> %s", sub["name"], fp)
-    log.info("capture done -> %s", out)
+        # Metadata sidecar for `generate.py --ingest`, which does all the SVG work
+        # (recolour, crop to content, size, mirror). Raw export stays untouched.
+        meta = {
+            "name": sub.get("display", sub["name"]),
+            "category": sub.get("category", "People"),
+            "mirror_for_left": bool(sub.get("mirror_for_left", False)),
+        }
+        with open(svg_path[:-4] + ".json", "w", encoding="utf-8") as fh:
+            json.dump(meta, fh, indent=2)
+        log.info("captured %s (+ metadata)", sub["name"])
+    log.info("capture done -> %s  (next: generate.py --ingest)", out)
 
 # =========================================================================== #
 # dispatch — set MODE and Run Script
