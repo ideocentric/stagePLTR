@@ -95,7 +95,31 @@ hands × 5 genres = 150). It is **not** all shipped as flat palette entries:
   a name if the file omits one); **"Remove Object Pack…"** removes one by id.
   (Same machinery as Phase 3's per-file embed/import.)
 
-## 11. Stable decisions (do not drift)
+## 11. Blender capture → object (the whole-character authoring contract)
+The Blender + MPFB authoring path (see [PIPELINE.md](PIPELINE.md),
+[blender-flow/REQUIREMENTS.md](blender-flow/REQUIREMENTS.md), and
+`blender-flow/stagegen.py`) produces a **complete posed character — body, hair,
+and instrument together — as one captured SVG = one object**, not layered parts.
+The capture is normalized to obey §1–§6 so it drops straight into the pack
+pipeline with no hand-editing:
+
+- **Scale:** export at **1 SVG unit = 10 mm**. With `ortho_scale = 2.0 m` the 2 m
+  frame is exactly 200 units, so §1 holds with no rescale.
+- **Frame & registration:** `viewBox 0 0 200 200`, figure centred at (100, 100),
+  facing **north (−y up)** per §4 — the normalizer recentres/flips as needed.
+- **Line convention:** inline stroke is stripped and paths are tagged `.ln`/`.lnf`
+  per §2, so the generator's injected `<style>` block drives the look.
+- **Footprint:** the normalizer records the figure's tight 2-D bbox as
+  `footprint_units` (§6) in a sidecar, so size is declared without an SVG geometry
+  engine (Blender projects the bbox through the camera).
+- **Handedness:** authored right-handed; the left variant is the free 2-D mirror
+  in `generate.py` (§5). The instrument is captured **with** the figure (the hands
+  register to it in 3-D), so there is no separate 2-D instrument composite.
+
+Captured + normalized objects feed `generate.py`'s pack emit (§10) and ship as a
+loadable pack — the contributor's "initial set" is exactly such a pack.
+
+## 12. Stable decisions (do not drift)
 - 200 units = 2 m (1 unit = 1 cm); `S` = 10 mm/px → 1 unit = 1 px.
 - Faces north; right-handed source; mirror for left.
 - `.ln`/`.lnf` classes, `#111`, width 1.6, transparent background.
@@ -103,3 +127,5 @@ hands × 5 genres = 150). It is **not** all shipped as flat palette entries:
   `defaultSize` = its `[w, h]`.
 - Naming + catalog/pack output generated from `manifest.json`, never hand-edited.
 - Curated built-ins ship with the app; the full matrix ships as loadable packs.
+- Blender capture = whole character incl. instrument → one object, normalized to
+  1 unit = 10 mm / 200-frame / north / `.ln`–`.lnf` before assembly (§11).

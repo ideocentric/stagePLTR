@@ -26,13 +26,25 @@ The work is organized so you do the expensive steps rarely:
 | Handedness      | **2D mirror in SVG** — no render | Free                      |
 | Instrument art  | **Your existing scaled instrument SVGs** | Already done      |
 
-The instrument itself is **not** rendered from 3D. You already built a scaled,
-real-world-dimension instrument SVG set — keep using it. In 3D you only need a
-*proxy* instrument (a primitive sized to the real thing) so the hands pose to
-the correct footprint; the proxy is hidden from the render, and the real
-instrument SVG is composited back in 2D at the matching position. This keeps
-instruments vector-perfect and to scale, and cuts your asset purchases down to
-"a figure system + a few hairstyles."
+> **Formalized contributor path (whole-character capture).** The
+> `blender-flow/stagegen.py` toolkit captures the **complete posed character —
+> body, hair, and instrument together — as one SVG = one object** (`spec.md` §11).
+> The instrument is a real mesh in the `INSTRUMENT` collection, rigid-attached to
+> a torso bone so it follows posing, and it is captured *with* the figure. This is
+> the simplest, most automatable path and the one the docs below assume.
+>
+> The 2-D vector-composite alternative described next (render the figure, keep the
+> instrument as a separate scaled SVG, composite in 2-D) remains valid as an
+> advanced option when you want vector-perfect instruments reused across many
+> figures — but it requires precise 2-D registration and is not the default.
+
+In the vector-composite alternative, the instrument itself is **not** rendered
+from 3D. You already built a scaled, real-world-dimension instrument SVG set —
+keep using it. In 3D you only need a *proxy* instrument (a primitive sized to the
+real thing) so the hands pose to the correct footprint; the proxy is hidden from
+the render, and the real instrument SVG is composited back in 2D at the matching
+position. This keeps instruments vector-perfect and to scale, and cuts your asset
+purchases down to "a figure system + a few hairstyles."
 
 ---
 
@@ -69,12 +81,13 @@ Author this once and never change it; it is the 3D-side companion to `spec.md`.
   **−Y** (downstage / toward the audience). "North / up" in the output =
   upstage / away from audience, matching `spec.md`.
 - **Units:** Calibrate once — render a known-length reference object, measure it
-  in the exported SVG, and set the exporter scale so **1 SVG unit = 1 mm**.
-  After that every export is automatically to scale.
-- **Stroke:** Single black contour weight (match `spec.md`'s `.ln` convention
-  during composition).
-- **Canvas:** Fixed square `viewBox` (e.g. `0 0 2000 2000` at 1 unit = 1 mm for
-  a 2 m frame), identical for all parts.
+  in the exported SVG, and set the exporter scale so **1 SVG unit = 10 mm**
+  (matching `spec.md` §1: 200 units = 2 m). After that every export is
+  automatically to scale and consistent with the 2-D parts/app frame.
+- **Stroke:** Single black contour weight; normalization strips the inline stroke
+  and applies `spec.md`'s `.ln`/`.lnf` classes (the generator injects the style).
+- **Canvas:** Fixed square `viewBox` `0 0 200 200` (1 unit = 10 mm for the 2 m
+  frame), identical for all objects, centred at (100, 100).
 
 ---
 
