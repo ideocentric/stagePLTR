@@ -22,78 +22,81 @@ Source: <https://static.makehumancommunity.org/assets/assetpacks.html> — zip p
 of assets for MPFB2/MakeHuman; **MakeHuman system assets** is required. Every pack
 is **CC0** or **CC-BY**; the tables below are the master credit list. **★ = used
 by this project** (the per-character table records each figure's actual
-obligations). For CC-BY packs with no individually-named creator, attribute the
-pack itself ("MakeHuman community asset pack <name>, CC-BY-4.0").
+obligations). Authors are taken from each pack's page; most packs are community
+collections, so multiple contributors are credited (handles, as listed on the
+pack pages).
 
 ### CC0 — no attribution required (credited as courtesy)
-| Pack | Contents | Author |
+| Pack | Contents | Contributors |
 |---|---|---|
-| ★ MakeHuman system assets *(required)* | proxies, eyes, teeth… | — |
-| System clothes materials 01 | extra clothes materials | — |
-| System hair materials 01 | extra hair materials | — |
-| Animal 01 | animal/furry transforms | — |
-| Arms 01 | realistic arm deforms | — |
-| Cheek 01 | realistic cheek deforms | — |
-| Ears 01 | realistic ear deforms | — |
-| Hands 01 | realistic hand deforms | — |
-| Nose 01 | realistic nose deforms | — |
-| ★ Poses 01 | sitting poses | — |
-| ★ Poses 02 | sports poses | — |
-| Skins 01 / 02 / 03 | natural female / male / non-natural skins | — |
-| Bodyparts 01 | horns | — |
-| Bodyparts 04 | nails | — |
-| Bodyparts 05 | beards & moustaches | — |
-| Dress 01 | female gowns & dresses | — |
-| Equipment 01 | weapons | — |
+| ★ MakeHuman system assets *(required)* | proxies, eyes, teeth… | not individually credited |
+| System clothes materials 01 | clothes materials | MargaretToigo |
+| System hair materials 01 | hair materials | bogdan666, culturalibre, dariush086, Joel Palmius, MTKnife, MargaretToigo |
+| Animal 01 | animal/furry transforms | culturalibre, Elvaerwyn, JALdMIC, titleknown |
+| Arms 01 | arm deforms | Elvaerwyn, Mindfront |
+| Cheek 01 | cheek deforms | Elvaerwyn |
+| Ears 01 | ear deforms | Elvaerwyn, jujube, Mindfront, RehmanPolanski |
+| Hands 01 | hand deforms | jujube, Mindfront |
+| Nose 01 | nose deforms | Elvaerwyn, Habanero, jujube, Mindfront |
+| ★ Poses 01 | sitting poses | Anrico, callharvey3d, Elvaerwyn, milkman, Mindfront, sweetan008, wolgade, xhado84 |
+| ★ Poses 02 | sports poses | callharvey3d, culturalibre, Elvaerwyn, gschabau, Henny, joachip, punkduck |
+| Skins 01 | natural female skins | blindsaypatten, bobby_03, callharvey3d, CutOff3D, darthfurby, flower-angel, Nyloseth, OnlyTheGhosts, saltycowdawg, skalldyrssuppe, spreadcore, MargaretToigo |
+| Skins 02 | natural male skins | jartur69, ken1138, Mindfront, OnlyTheGhosts, RehmanPolanski, MargaretToigo |
+| Skins 03 | non-natural skins | bobby_03, bogdan666, callharvey3d, culturalibre, joepal, naim_abbassi, reizibarrientos, sohh, sonntag78, spreadcore, titleknown, trashhunter, xhado84 |
+| Bodyparts 01 | horns | culturalibre, FreezyChan, JALdMIC |
+| Bodyparts 04 | nails | grinsegold, Mindfront, MargaretToigo, wolgade |
+| Bodyparts 05 | beards & moustaches | culturalibre, grinsegold, RehmanPolanski, WDG |
+| Dress 01 | female gowns & dresses | Aethelraed_Unraed, Mindfront, MargaretToigo, WDG |
+| Equipment 01 | weapons | culturalibre, Joel Palmius, o4saken |
 | Eyebrows 01 | hi-res eyebrows | Mindfront |
 | Eyelashes 01 | hi-res eyelashes | Mindfront |
-| Glasses 01 | glasses | — |
-| Gloves 01 | gloves | — |
-| ★ Hair 01 | low-poly / stylized hair | — |
-| Hats 01 | hats & caps | — |
-| Hats 02 | helmets | — |
-| ★ Masks 01 | masks | — |
-| Pants 01 | pants | — |
-| ★ Shirts 01 | t-shirts, sweaters, tops | — |
-| Shoes 01 | shoes & boots | — |
-| Skirts 01 | skirts | — |
+| Glasses 01 | glasses | culturalibre, EWS, frankyaye, kwnet_at, spamrakuen, MargaretToigo |
+| Gloves 01 | gloves | culturalibre, learning, MargaretToigo |
+| ★ Hair 01 | low-poly / stylized hair | Cortu, culturalibre, Elvaerwyn, Faydaen, learning, littleright, punkduck, RehmanPolanski, sonntag78, MargaretToigo |
+| Hats 01 | hats & caps | Aethelraed_Unraed, grinsegold, Joel Palmius, jujube, MargaretToigo |
+| Hats 02 | helmets | culturalibre, grinsegold, javherre, MrGreaterThan |
+| ★ Masks 01 | masks | culturalibre, Joel Palmius |
+| Pants 01 | pants | Cortu, MargaretToigo |
+| ★ Shirts 01 | t-shirts, sweaters, tops | Elvaerwyn, Joel Palmius, namuhekam, skalldyrssuppe, MargaretToigo |
+| Shoes 01 | shoes & boots | Cortu, culturalibre, grinsegold, scailman, MargaretToigo |
+| Skirts 01 | skirts | frankyaye, MargaretToigo |
 | Suits 01 | formal suits | Margaret Toigo |
-| Suits 02 | sci-fi / fantasy suits | — |
-| Underwear 01 | female underwear | — |
-| Underwear 04 | socks | — |
-| Hair editor *(functional)* | hair editing | — |
-| Visemes 01 / 02 *(functional)* | visemes | — |
-| Faceunits 01 *(functional)* | face units | — |
+| Suits 02 | sci-fi / fantasy suits | culturalibre, Donitz, green_tomato, joachip, MatCreator, RehmanPolanski, Slayer227, TheGreatEngineer |
+| Underwear 01 | female underwear | not individually credited |
+| Underwear 04 | socks | Joel Palmius, MargaretToigo |
+| Hair editor *(functional)* | hair editing | Tomáš Klecer |
+| Visemes 01 / 02 *(functional)* | visemes | Mika Suominen |
+| Faceunits 01 *(functional)* | face units | Mika Suominen |
 
-### CC-BY — attribution required (credit the author)
-| Pack | Contents | Author |
+### CC-BY — attribution required (credit the contributors)
+| Pack | Contents | Contributors |
 |---|---|---|
 | Animal 02 | animal/furry details | JALdMIC |
 | Animal 03 | animal/furry head deforms | JALdMIC |
 | Animal 04 | animal/furry full-body transforms | JALdMIC |
-| Bodyparts 02 | horns | _(pack — MakeHuman community)_ |
-| Bodyparts 03 | tails & wings | _(pack)_ |
-| Bodyparts 06 | beards & moustaches | _(pack)_ |
+| Bodyparts 02 | horns | Elvaerwyn, JALdMIC |
+| Bodyparts 03 | tails & wings | culturalibre, Elvaerwyn |
+| Bodyparts 06 | beards & moustaches | culturalibre, Elvaerwyn, grinsegold |
 | Dress 02 | female gowns & dresses | Elvaerwyn |
-| Dress 03 | female gowns & dresses | _(pack)_ |
-| Equipment 02 | weapons | _(pack)_ |
-| Equipment 03 | bags & tools | _(pack)_ |
-| Glasses 02 | glasses | _(pack)_ |
-| Hats 03 | hats & caps | _(pack)_ |
-| Hats 04 | helmets | _(pack)_ |
+| Dress 03 | female gowns & dresses | Mindfront, punkduck |
+| Equipment 02 | weapons | culturalibre, JALdMIC, MaciekG, punkduck |
+| Equipment 03 | bags & tools | culturalibre, Elvaerwyn, Mindfront, punkduck |
+| Glasses 02 | glasses | Elvaerwyn, punkduck |
+| Hats 03 | hats & caps | culturalibre, Elvaerwyn, MaciekG, Mindfront, punkduck |
+| Hats 04 | helmets | culturalibre, DredNicolson, JALdMIC, MaciekG, Mindfront, punkduck |
 | ★ Hair 02 | high-poly hair | Elvaerwyn |
-| ★ Hair 03 | alpha-7 hair adaptations & misc | _(pack)_ |
-| ★ Masks 02 | masks | _(pack)_ |
-| Pants 02 | long-legged pants | _(pack)_ |
-| Pants 03 | short-legged pants / swim trunks | _(pack)_ |
-| ★ Shirts 02 | long-sleeved cardigans/sweaters/shirts | _(pack)_ |
-| ★ Shirts 03 | short-sleeved shirts/tunics/tops | _(pack)_ |
-| Shoes 02 | low shoes / sneakers / sandals | _(pack)_ |
-| Shoes 03 | boots | _(pack)_ |
-| Skirts 02 | skirts | _(pack)_ |
-| Suits 03 | thematic suits | _(pack)_ |
-| Underwear 02 | female underwear & bikinis | _(pack)_ |
-| Underwear 03 | underwear & swimwear | _(pack)_ |
+| ★ Hair 03 | alpha-7 hair adaptations & misc | culturalibre, grinsegold, punkduck |
+| ★ Masks 02 | masks | culturalibre, Elvaerwyn, Mathias_Gredal |
+| Pants 02 | long-legged pants | Elvaerwyn, Mindfront, punkduck |
+| Pants 03 | short-legged pants / swim trunks | Elvaerwyn, Mindfront, punkduck |
+| ★ Shirts 02 | long-sleeved cardigans/sweaters/shirts | Elvaerwyn, EWS, janexx, Mindfront, punkduck |
+| ★ Shirts 03 | short-sleeved shirts/tunics/tops | DredNicolson, Elvaerwyn, Mindfront, punkduck |
+| Shoes 02 | low shoes / sneakers / sandals | callharvey3d, culturalibre, DressUpDoc, Elvaerwyn, Mindfront, punkduck |
+| Shoes 03 | boots | Elvaerwyn, MaciekG, madmanny, Mindfront, punkduck, scailman |
+| Skirts 02 | skirts | callharvey3d, Elvaerwyn, MTKnife, punkduck, scsouza, sonicteam998 |
+| Suits 03 | thematic suits | culturalibre, Elvaerwyn, grinsegold, MaciekG, punkduck |
+| Underwear 02 | female underwear & bikinis | Elvaerwyn, JALdMIC, Mindfront, punkduck |
+| Underwear 03 | underwear & swimwear | Elvaerwyn, Joel Palmius, Mindfront, punkduck |
 
 ## Per-character provenance
 Log which packs each shipped figure was built from, so the CC-BY credits trace to
