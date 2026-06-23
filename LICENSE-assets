@@ -1,0 +1,35 @@
+stagePLTR — Visual asset license
+=================================
+
+This file covers the project's VISUAL ART ASSETS, which are licensed separately
+from the application code. The code is licensed under the GNU General Public
+License v3 (see LICENSE).
+
+Scope
+-----
+The following are licensed under the Creative Commons Attribution 4.0
+International License (CC-BY-4.0), full text in LICENSE-CC-BY-4.0.txt:
+
+  - The SVG device/object/figure icons we author, e.g. under:
+      assets/plot/*.svg
+      figures/parts/**, figures/out/**, figures/dist/**
+  - The stage-plot figure line-art produced by the figures/ pipeline.
+
+  Copyright (C) 2026 Matt Comeione.
+  Attribution: "stagePLTR figure & object icons, CC-BY-4.0, by Matt Comeione."
+
+Third-party source assets
+-------------------------
+Some figures are produced (via the Blender/MPFB pipeline) from MakeHuman
+community asset packs, which are individually CC0 or CC-BY-4.0. Per-asset
+provenance and the required CC-BY attributions are recorded in
+figures/ASSETS.md. CC-BY attribution carries to the 2D icon derivatives shipped
+here; CC0 source assets impose no obligation but are credited there as a
+courtesy.
+
+Notes
+-----
+- App icons and any third-party logos/trademarks are NOT covered by this license
+  and retain their own terms.
+- This is a license declaration, not legal advice. When in doubt about a
+  specific third-party asset, verify its current terms at its source.
