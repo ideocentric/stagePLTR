@@ -1,24 +1,52 @@
 # Asset provenance & licensing
 
-So the license trail is auditable for an open-source release. The rule
-(PIPELINE.md §11): **commit 2D derivatives and your own work; never commit
-purchased/licensed 3D source assets** (meshes, textures, `.duf`/`.dsf`, `.blend`,
-`.mhm`, `.fbx`). Those stay in the gitignored `blendsrc/`.
+So the license trail is auditable for an open-source release. We ship **2D SVG
+derivatives** (line-art icons); the 3D working files stay in the gitignored
+`blendsrc/` (PIPELINE.md §11). The MakeHuman-community source assets are all
+**CC0 or CC-BY** — both redistributable — so the editable sources *may* also be
+committed if desired.
 
-stagePLTR's code and this SVG art are **dual-licensed** — code under the app's
-license, the SVG art under a separate art license (CC-BY-4.0 or CC0) noted here.
+## Licensing structure
+- **Code:** GPLv3 (`LICENSE`).
+- **Our SVG art** (figure/object icons we author): a CC art license in
+  `LICENSE-assets` — **CC-BY-4.0** (or CC0).
+- **Third-party MPFB assets:** CC0 or CC-BY per the table below. Because CC-BY
+  attribution **carries to derivatives**, every figure icon built from a CC-BY
+  pack must credit that pack's creator here — even though we ship only the SVG.
+  Ship the **CC-BY-4.0 license text** (`LICENSE-CC-BY-4.0.txt` or folded into
+  `LICENSE-assets`) since CC-BY requires the license travel with the work; CC0
+  needs no bundled text but is marked below.
 
-| Asset | Source / Tool | License | In repo? |
-|---|---|---|---|
-| Base figures | MakeHuman 1.2 / MB-Lab | CC0 (verify current terms) | 2D SVG only |
-| Hair shells | MakeHuman / own modeling | CC0 / your art | 2D SVG only |
-| Instrument & object icons | your own work | (art license, e.g. CC-BY-4.0) | yes (SVG) |
-| _(if ever used)_ DAZ hair/morphs | DAZ store | DAZ EULA — 2D render only | 2D SVG only, no mesh |
+## MakeHuman community asset packs
+Source: <https://static.makehumancommunity.org/assets/assetpacks.html>
+(licenses vary per pack — verify on the page; the "01" base packs are CC0, the
+"02/03" variants are typically CC-BY by third-party creators).
 
-Notes:
-- MakeHuman / MB-Lab output is permissive/CC0 — the recommended path for a clean
-  public release. Keep working files out of git regardless.
-- If you ever supplement with DAZ assets: DAZ's terms permit distributing your
-  **2D renders** (the SVG, from which no mesh can be extracted) but **not** the
-  meshes/textures. Avoid items with the **Editorial License**. Not legal advice —
-  a DAZ sales-support ticket describing open-source 2D use removes ambiguity.
+| Pack | License | Creator (for CC-BY) |
+|---|---|---|
+| MakeHuman system assets *(required)* | CC0 | — |
+| System hair / clothes materials 01 | CC0 | — |
+| Skins 01 / 02 / 03 | CC0 | — |
+| Poses 01 / 02 | CC0 | — |
+| Hair 01 | CC0 | — |
+| Hair 02 | **CC-BY** | _(fill in from pack page)_ |
+| Hair 03 | **CC-BY** | _(fill in)_ |
+| Shirts 01 | CC0 | — |
+| Shirts 02 / 03 | **CC-BY** | _(fill in)_ |
+| Masks 01 | CC0 | — |
+| Masks 02 | **CC-BY** | _(fill in)_ |
+
+## Per-character provenance
+Log which packs each shipped figure was built from, so the CC-BY credits are
+traceable to specific icons (the pack table above is the master credit list).
+
+| Figure / pack | MPFB packs used | Any CC-BY? |
+|---|---|---|
+| _(e.g. Guitarist — Female)_ | system, Hair 02, Shirts 01 | Hair 02 → credit |
+
+## Other sources (not redistributable as 3D)
+- **HumGen / DAZ:** paid EULAs permit distributing your **2D renders** (the SVG,
+  no extractable mesh) but **not** the meshes/textures. Avoid DAZ items with the
+  **Editorial License**. Icons OK; never commit the `.blend`/mesh.
+
+_Not legal advice — verify current pack terms at the URL above._
