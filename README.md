@@ -112,8 +112,17 @@ keep the cross-platform, native-feel goals in mind.
 
 ## License
 
-stagePLTR is licensed under the **GNU General Public License v3.0 or later**
-(`GPL-3.0-or-later`). See [`LICENSE`](LICENSE) for the full text.
+stagePLTR is **dual-licensed**:
+
+- **Code** — **GNU General Public License v3.0 or later** (`GPL-3.0-or-later`);
+  see [`LICENSE`](LICENSE).
+- **Visual art** (the SVG device/object/figure icons) — **Creative Commons
+  Attribution 4.0 International** (`CC-BY-4.0`); see [`LICENSE-assets`](LICENSE-assets)
+  and [`LICENSE-CC-BY-4.0.txt`](LICENSE-CC-BY-4.0.txt).
+
+Some figures are produced from MakeHuman-community asset packs (each CC0 or
+CC-BY); per-asset provenance and attributions are tracked in
+[`figures/ASSETS.md`](figures/ASSETS.md).
 
 ---
 
