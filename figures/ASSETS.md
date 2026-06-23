@@ -16,6 +16,8 @@ committed if desired.
   Ship the **CC-BY-4.0 license text** (`LICENSE-CC-BY-4.0.txt` or folded into
   `LICENSE-assets`) since CC-BY requires the license travel with the work; CC0
   needs no bundled text but is marked below.
+- **BlenderKit Royalty-Free** (instrument sources): 2D derivatives are
+  distributable; the 3D models are not. See the BlenderKit section below.
 
 ## MakeHuman community asset packs (full catalog)
 Source: <https://static.makehumancommunity.org/assets/assetpacks.html> — zip packs
@@ -106,9 +108,28 @@ specific icons (the catalog above is the master credit list).
 |---|---|---|
 | _(e.g. Guitarist — Female)_ | system, Hair 02, Shirts 01 | Hair 02 (Elvaerwyn) |
 
+## BlenderKit (Royalty-Free) instruments
+Instrument icons may be captured from **BlenderKit** (paid subscription) models via
+the same Blender stage, for visual consistency with the figures. Per BlenderKit's
+licensing FAQ, **Royalty-Free** assets allow commercial use, no attribution
+required, and explicitly permit **2D renders/derivatives** (even sold on stock
+sites) — the only bar is redistributing the asset **in 3D form** or in a way
+**users can easily extract**. A line-art SVG is non-extractable 2D, so it ships
+cleanly (and may be CC-BY-4.0 — downstream only ever gets the 2D).
+
+**Rules:** ship only the SVG; **never commit the BlenderKit `.blend`/model** (it
+stays in gitignored `blendsrc/`). These icons are *terminal* — distributable, but
+not regenerable by others without their own BlenderKit subscription. RF needs no
+attribution, but we credit authors here as a courtesy (BlenderKit's FAQ asks the
+same).
+
+| Instrument icon | BlenderKit asset | Author | License |
+|---|---|---|---|
+| _(e.g. Electric Guitar)_ | _(asset name)_ | _(author handle)_ | Royalty Free — 2D derivative only, model not redistributed |
+
 ## Other sources (not redistributable as 3D)
 - **HumGen / DAZ:** paid EULAs permit distributing your **2D renders** (the SVG,
   no extractable mesh) but **not** the meshes/textures. Avoid DAZ items with the
   **Editorial License**. Icons OK; never commit the `.blend`/mesh.
 
-_Not legal advice — verify current pack terms at the URL above._
+_Not legal advice — verify current pack/asset terms with each source._
